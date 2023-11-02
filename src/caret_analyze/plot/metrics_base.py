@@ -66,7 +66,10 @@ class MetricsBase(metaclass=ABCMeta):
             provider = converter_cb._provider
             converter = provider.get_sim_time_converter(frame_min, frame_max)
         elif isinstance(self._target_objects[0], Path):
-            pass
+            assert len(self._target_objects[0].child) > 0
+            # TODO(hsgwa): refactor
+            provider = self._target_objects[0].child[0]._provider  # type: ignore
+            converter = provider.get_sim_time_converter(frame_min, frame_max)
         else:
             provider = self._target_objects[0]._provider
             converter = provider.get_sim_time_converter(frame_min, frame_max)
@@ -88,7 +91,11 @@ class MetricsBase(metaclass=ABCMeta):
             columns: list[ColumnValue] = \
                 [ColumnValue(_) for _ in records.columns]
 
-            converted_records_list.append(RecordsFactory.create_instance(values, columns=columns))
+            try:
+                converted_records_list.append(RecordsFactory.create_instance(values, columns=columns))
+            except Exception as e:
+                for w in columns:
+                    print(f"FAIL column={w}: {e}")
 
         return converted_records_list
 

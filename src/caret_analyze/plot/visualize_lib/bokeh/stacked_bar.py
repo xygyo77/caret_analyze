@@ -19,7 +19,8 @@ from bokeh.plotting import Figure
 
 from .util import (apply_x_axis_offset, ColorSelectorFactory,
                    HoverKeysFactory, init_figure)
-
+from ....runtime import Path
+from ....common import ClockConverter
 
 class BokehStackedBar:
 
@@ -56,6 +57,9 @@ class BokehStackedBar:
         # # |       b1      b2      b3
         # # +-------s1------s2------s3---------->
 
+        from ....common import loc
+        loc()
+
         # # get stacked bar data
         data: dict[str, list[int | float]]
         y_labels: list[str] = []
@@ -73,7 +77,21 @@ class BokehStackedBar:
         elif self._xaxis_type == 'index':
             x_label = 'index'
         else:  # sim_time
-            raise NotImplementedError()
+            converter: ClockConverter | None = None
+            assert isinstance(target_objects, Path)
+            assert len(target_objects.child) > 0
+            # TODO(hsgwa): refactor
+            provider = target_objects.child._provider  # type: ignore
+            converter = provider.get_sim_time_converter(frame_min, frame_max)
+            #for k, v in data.items():
+            #    print(f"{k}: {v}")
+            data = {k: [converter.convert(item) for item in v] for k, v in data.items()}
+            #for k, v in data.items():
+            #    print(f"{k}: {v}")
+            frame_min = converter.convert(frame_min)
+            frame_max = converter.convert(frame_max)
+            x_range_name = 'x_plot_axis'
+            apply_x_axis_offset(fig, frame_min, frame_max, x_range_name)
 
         color_selector = ColorSelectorFactory.create_instance(coloring_rule='unique')
         if self._case == 'best':
@@ -121,7 +139,7 @@ class StackedBarSource:
         for prev_, next_ in zip(reversed(y_labels[:-1]), reversed(y_labels[1:])):
             data[prev_] = [data[prev_][i] + data[next_][i] for i in range(len(data[next_]))]
 
-        if xaxis_type == 'system_time':
+        if xaxis_type == 'system_time'or xaxis_type == 'sim_time':
             # Update the timestamps from absolutely time to offset time
             data[x_label] = self._updated_timestamps_to_offset_time(
                 data[x_label])
@@ -131,8 +149,6 @@ class StackedBarSource:
 
             # Slide x axis values so that the bottom left of bars are the start time.
             data[x_label] = self._add_shift_value(data[x_label], half_width_list)
-        elif xaxis_type == 'sim_time':
-            raise NotImplementedError()
         else:  # index
             data[x_label] = list(range(0, len(data[y_labels[0]])))
             x_width_list = self._get_x_width_list(data[x_label])
