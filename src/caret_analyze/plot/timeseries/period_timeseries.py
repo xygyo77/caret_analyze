@@ -21,6 +21,7 @@ import pandas as pd
 from ..metrics_base import MetricsBase
 from ...record import Period, RecordsInterface
 from ...runtime import CallbackBase, Communication, Publisher, Subscription
+from ...common import loc
 
 TimeSeriesTypes = CallbackBase | Communication | (Publisher | Subscription)
 
@@ -32,6 +33,7 @@ class PeriodTimeSeries(MetricsBase):
         self,
         target_objects: Sequence[TimeSeriesTypes]
     ) -> None:
+        loc.loc()
         super().__init__(target_objects)
 
     def to_dataframe(self, xaxis_type: str = 'system_time') -> pd.DataFrame:
@@ -61,6 +63,7 @@ class PeriodTimeSeries(MetricsBase):
 
         """
         timeseries_records_list = self.to_timeseries_records_list(xaxis_type)
+        print(f"{loc.loc()} {len(timeseries_records_list)}")
         all_df = pd.DataFrame()
         for to, period_records in zip(self.target_objects, timeseries_records_list):
             period_df = period_records.to_dataframe()
@@ -117,6 +120,7 @@ class PeriodTimeSeries(MetricsBase):
         timeseries_records_list: list[RecordsInterface] = [
             _.to_records() for _ in self._target_objects
         ]
+        print(f"{loc.loc()} {len(timeseries_records_list)}")
 
         if xaxis_type == 'sim_time':
             timeseries_records_list = \

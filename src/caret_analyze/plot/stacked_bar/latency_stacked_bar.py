@@ -18,6 +18,7 @@ import pandas as pd
 
 from ...record import RecordsInterface, ResponseTime, StackedBar
 from ...runtime import Path
+from ...common import loc
 
 
 class LatencyStackedBar:
@@ -50,14 +51,27 @@ class LatencyStackedBar:
             Latency dataframe.
 
         """
+        loc.loc()
+
         # NOTE: returned columns aren't used because they don't include 'start time'
         # TODO: delete 1e-6
         stacked_bar_dict, _ = self.to_stacked_bar_data()
+        converter: ClockConverter | None = None
+        if xaxis_type == 'sim_time':
+            frame_min = stacked_bar_dict['start time'][0]
+            frame_max = stacked_bar_dict['start time'][-1]
+            provider = target_objects.child[0]._provider  # type: ignore
+            converter = provider.get_sim_time_converter(frame_min, frame_max)
+
         millisecond_dict: dict[str, list[float]] = {}
-        if xaxis_type == 'system_time':
+        if xaxis_type == 'system_time' or xaxis_type == 'sim_time':
             for column in stacked_bar_dict:
-                millisecond_dict[column] = \
-                    [timestamp * 1e-6 for timestamp in stacked_bar_dict[column]]
+                if not converter:
+                    millisecond_dict[column] = \
+                        [timestamp * 1e-6 for timestamp in stacked_bar_dict[column]]
+                else:
+                    millisecond_dict[column] = \
+                        [converter.convert(timestamp) * 1e-6 for timestamp in stacked_bar_dict[column]]
             df = pd.DataFrame(millisecond_dict)
             return df
         elif xaxis_type == 'index':
@@ -78,6 +92,7 @@ class LatencyStackedBar:
             Columns (not include 'start time').
 
         """
+        loc.loc
         response_records: RecordsInterface = \
             self._get_response_time_record(self._target_objects)
         stacked_bar = StackedBar(response_records)

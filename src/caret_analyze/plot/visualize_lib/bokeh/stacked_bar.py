@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
+from calendar import c
 
 from bokeh.models import GraphRenderer, Legend
 from bokeh.plotting import Figure
@@ -21,6 +22,11 @@ from .util import (apply_x_axis_offset, ColorSelectorFactory,
                    HoverKeysFactory, init_figure)
 from ....runtime import Path
 from ....common import ClockConverter
+from ....record import RecordsInterface
+from ....record.record_factory import RecordFactory, RecordsFactory
+from ....record.column import Columns, ColumnValue
+
+from ....common import loc
 
 class BokehStackedBar:
 
@@ -57,8 +63,7 @@ class BokehStackedBar:
         # # |       b1      b2      b3
         # # +-------s1------s2------s3---------->
 
-        from ....common import loc
-        loc()
+        loc.loc()
 
         # # get stacked bar data
         data: dict[str, list[int | float]]
@@ -72,22 +77,17 @@ class BokehStackedBar:
         frame_min = data['start time'][0]
         frame_max = data['start time'][-1]
         x_label = 'start time'
+        converter: ClockConverter | None = None
         if self._xaxis_type == 'system_time':
             apply_x_axis_offset(fig, frame_min, frame_max)
         elif self._xaxis_type == 'index':
             x_label = 'index'
         else:  # sim_time
-            converter: ClockConverter | None = None
             assert isinstance(target_objects, Path)
             assert len(target_objects.child) > 0
             # TODO(hsgwa): refactor
-            provider = target_objects.child._provider  # type: ignore
+            provider = target_objects.child[0]._provider  # type: ignore
             converter = provider.get_sim_time_converter(frame_min, frame_max)
-            #for k, v in data.items():
-            #    print(f"{k}: {v}")
-            data = {k: [converter.convert(item) for item in v] for k, v in data.items()}
-            #for k, v in data.items():
-            #    print(f"{k}: {v}")
             frame_min = converter.convert(frame_min)
             frame_max = converter.convert(frame_max)
             x_range_name = 'x_plot_axis'
@@ -98,11 +98,11 @@ class BokehStackedBar:
             color_selector.get_color()
         colors = [color_selector.get_color(y_label) for y_label in y_labels]
 
-        source = StackedBarSource(data, y_labels, self._xaxis_type, x_label)
+        source = StackedBarSource(data, y_labels, self._xaxis_type, x_label, converter)
         # reverse the order of y_labels to reverse the order in which bars are stacked.
         stacked_bar = fig.vbar_stack(list(reversed(y_labels)), x='start time',
                                      width='x_width_list', color=list(reversed(colors)),
-                                     source=source.to_source())
+                                     source=source.to_source(None))
         source.add_label_data_to_stacked_bar(stacked_bar)
         source.add_latency_data_to_stacked_bar(stacked_bar)
 
@@ -127,31 +127,32 @@ class StackedBarSource:
         data: dict[str, list[int | float]],
         y_labels: list[str],
         xaxis_type: str,
-        x_label: str
+        x_label: str,
+        converter: ClockConverter | None
     ) -> None:
         x_width_list: list[float] = []
 
         # Convert the data unit to second
-        data = self._updated_with_unit(data, y_labels, 1e-6)
-        data = self._updated_with_unit(data, ['start time'], 1e-9)
+        data = self._updated_with_unit(data, y_labels, 1e-6, None)
+        data = self._updated_with_unit(data, ['start time'], 1e-9, converter)
 
         # Calculate the stacked y values
         for prev_, next_ in zip(reversed(y_labels[:-1]), reversed(y_labels[1:])):
             data[prev_] = [data[prev_][i] + data[next_][i] for i in range(len(data[next_]))]
 
-        if xaxis_type == 'system_time'or xaxis_type == 'sim_time':
+        if xaxis_type == 'system_time' or xaxis_type == 'sim_time':
             # Update the timestamps from absolutely time to offset time
             data[x_label] = self._updated_timestamps_to_offset_time(
-                data[x_label])
+                data[x_label], None)
 
-            x_width_list = self._get_x_width_list(data[x_label])
+            x_width_list = self._get_x_width_list(data[x_label], None)
             half_width_list = [x / 2 for x in x_width_list]
 
             # Slide x axis values so that the bottom left of bars are the start time.
             data[x_label] = self._add_shift_value(data[x_label], half_width_list)
         else:  # index
             data[x_label] = list(range(0, len(data[y_labels[0]])))
-            x_width_list = self._get_x_width_list(data[x_label])
+            x_width_list = self._get_x_width_list(data[x_label], None)
 
         self._data: dict[str, list[int | float]] = data
         self._x_width_list: list[float] = x_width_list
@@ -161,20 +162,27 @@ class StackedBarSource:
         data: dict[str, list[int | float]],
         columns: list[str] | None,
         unit: float,
+        converter: ClockConverter | None
     ) -> dict[str, list[float]]:
         # TODO: make timeseries and callback scheduling function use this function.
         #       create bokeh_util.py
         if columns is None:
             output_data: dict[str, list[float]] = {}
             for key in data.keys():
-                output_data[key] = [d * unit for d in data[key]]
+                if not converter:
+                    output_data[key] = [d * unit for d in data[key]]
+                else:
+                    output_data[key] = [converter.convert(d) * unit for d in data[key]]
         else:
             output_data = data
             for key in columns:
-                output_data[key] = [d * unit for d in data[key]]
+                if not converter:
+                    output_data[key] = [d * unit for d in data[key]]
+                else:
+                    output_data[key] = [converter.convert(d) * unit for d in data[key]]
         return output_data
 
-    def _get_x_width_list(self, x_values: list[float]) -> list[float]:
+    def _get_x_width_list(self, x_values: list[float], converter: ClockConverter | None) -> list[float]:
         """
         Get width between a x value and next x value.
 
@@ -190,8 +198,12 @@ class StackedBarSource:
 
         """
         # TODO: create bokeh_util.py and move this.
-        x_width_list: list[float] = \
-            [(x_values[i+1]-x_values[i]) * 0.99 for i in range(len(x_values)-1)]
+        if not converter:
+            x_width_list: list[float] = \
+                [(x_values[i+1]-x_values[i]) * 0.99 for i in range(len(x_values)-1)]
+        else:
+            x_width_list: list[float] = \
+                [(converter.convert(x_values[i+1])-converter.convert(x_values[i])) * 0.99 for i in range(len(x_values)-1)]
         x_width_list.append(x_width_list[-1])
         return x_width_list
 
@@ -221,12 +233,16 @@ class StackedBarSource:
 
     def _updated_timestamps_to_offset_time(
         self,
-        x_values: list[float]
+        x_values: list[float],
+        converter: ClockConverter | None
     ):
         new_values: list[float] = []
         first_time = x_values[0]
         for time in x_values:
-            new_values.append(time - first_time)
+            if not converter:
+                new_values.append(time - first_time)
+            else:
+                new_values.append(converter.convert(time) - converter.convert(first_time))
         return new_values
 
     def add_label_data_to_stacked_bar(self, stacked_bar: list[GraphRenderer]):
@@ -238,15 +254,17 @@ class StackedBarSource:
     def add_latency_data_to_stacked_bar(self, stacked_bar: list[GraphRenderer]):
         # add 'latency' data to each bar due to display hover
         for bar in stacked_bar:
-            bar.data_source.add(['latency = ' + str(latency)
-                                 for latency in self._data[bar.name]], 'latency')
+                bar.data_source.add(['latency = ' + str(latency)
+                                    for latency in self._data[bar.name]], 'latency')
 
     def to_source(
         self,
+        converter: ClockConverter | None
     ) -> dict[str, list[int | float]]:
         # NOTE: Using `ColumnDataSource`, it is not possible
         # NOTE: to display a different hover for each stack (cause unknown).
         # convert timestamp to latency
+        loc.loc()
         labels = list(self._data.keys())
         for k in self._data.keys():
             if k == 'start time':
@@ -255,10 +273,16 @@ class StackedBarSource:
                 continue
             target_data = self._data[k]
             below_data = self._data[labels[labels.index(k)+1]]
+            if converter:
+                target_data = [converter.convert(item) for item in target_data]
+                below_data = [converter.convert(item) for item in below_data]
             self._data[k] = [
                 target - below for target, below in
                 zip(target_data, below_data)
             ]
+            print(f"--- {k}: {len(self._data[k])=}")
+            for i in range(10):
+                print(f"  {self._data[k][i+10]=} = {target_data[i+10]=} - {below_data[i+10]=}")
 
         # set data used in stacked bar
         source = self._data

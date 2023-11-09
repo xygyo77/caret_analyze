@@ -21,6 +21,7 @@ import pandas as pd
 
 from ..record import ColumnValue, Range, RecordFactory, RecordsFactory, RecordsInterface
 from ..runtime import CallbackBase, Communication, Path, Publisher, Subscription
+from ..common import ClockConverter, loc
 
 TimeSeriesTypes = CallbackBase | Communication | (Publisher | Subscription) | Path
 
@@ -57,6 +58,7 @@ class MetricsBase(metaclass=ABCMeta):
         # get converter
         records_range = Range([to.to_records() for to in self.target_objects])
         frame_min, frame_max = records_range.get_range()
+        converter: ClockConverter | None = None
         if isinstance(self._target_objects[0], Communication):
             for comm in self._target_objects:
                 assert isinstance(comm, Communication)
@@ -70,6 +72,10 @@ class MetricsBase(metaclass=ABCMeta):
             # TODO(hsgwa): refactor
             provider = self._target_objects[0].child[0]._provider  # type: ignore
             converter = provider.get_sim_time_converter(frame_min, frame_max)
+            frame_min = converter.convert(frame_min)
+            frame_max = converter.convert(frame_max)
+            x_range_name = 'x_plot_axis'
+            #apply_x_axis_offset(fig, frame_min, frame_max, x_range_name)
         else:
             provider = self._target_objects[0]._provider
             converter = provider.get_sim_time_converter(frame_min, frame_max)
@@ -90,13 +96,20 @@ class MetricsBase(metaclass=ABCMeta):
 
             columns: list[ColumnValue] = \
                 [ColumnValue(_) for _ in records.columns]
-
+            print(f"--- {columns=}")
             try:
                 converted_records_list.append(RecordsFactory.create_instance(values, columns=columns))
             except Exception as e:
                 for w in columns:
                     print(f"FAIL column={w}: {e}")
 
+        print(f"{loc.loc()} {len(converted_records_list)=}")
+        if len(converted_records_list):
+            for records in converted_records_list:
+                for record in records:
+                    print(f"{record.data.items()=}")
+                    break
+                break
         return converted_records_list
 
     # TODO: Multi-column DataFrame are difficult for users to handle,

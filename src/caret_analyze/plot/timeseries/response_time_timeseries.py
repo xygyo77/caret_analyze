@@ -99,6 +99,12 @@ class ResponseTimeTimeSeries(MetricsBase):
         ]
 
         if xaxis_type == 'sim_time':
+            if len(timeseries_records_list):
+                for records in timeseries_records_list:
+                    for record in records:
+                        print(f" before --- {record.data.items()=}")
+                        break
+                    break
             timeseries_records_list = \
                 self._convert_timeseries_records_to_sim_time(timeseries_records_list)
 

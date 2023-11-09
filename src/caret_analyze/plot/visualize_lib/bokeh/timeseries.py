@@ -24,7 +24,7 @@ from bokeh.plotting import ColumnDataSource, Figure
 from .util import (apply_x_axis_offset, ColorSelectorFactory, get_callback_param_desc,
                    HoverKeysFactory, HoverSource, init_figure, LegendManager)
 from ...metrics_base import MetricsBase
-from ....common import ClockConverter
+from ....common import ClockConverter, loc
 from ....record import Range, RecordsInterface
 from ....runtime import CallbackBase, Communication, Path, Publisher, Subscription
 
@@ -48,8 +48,13 @@ class BokehTimeSeries:
         self._case = case
 
     def create_figure(self) -> Figure:
+        loc.loc()
         target_objects = self._metrics.target_objects
         timeseries_records_list = self._metrics.to_timeseries_records_list(self._xaxis_type)
+        if isinstance(target_objects, Path):
+            print(f"{loc.loc()}: {len(timeseries_records_list)=}")
+        else:
+            print(f"{loc.loc()}: {type(target_objects)=} {len(timeseries_records_list)=}")
 
         # Initialize figure
         y_axis_label = timeseries_records_list[0].columns[1]
@@ -87,7 +92,16 @@ class BokehTimeSeries:
                         converter = provider.get_sim_time_converter(frame_min, frame_max)
                         break
             elif isinstance(target_objects[0], Path):
-                converter = None
+                assert isinstance(target_objects[0], Path)
+                assert len(target_objects[0].child) > 0
+                # TODO(hsgwa): refactor
+                provider = target_objects.child[0]._provider  # type: ignore
+                converter = provider.get_sim_time_converter(frame_min, frame_max)
+                frame_min = converter.convert(frame_min)
+                frame_max = converter.convert(frame_max)
+                x_range_name = 'x_plot_axis'
+                apply_x_axis_offset(fig, frame_min, frame_max, x_range_name)
+
             else:
                 provider = target_objects[0]._provider
                 converter = provider.get_sim_time_converter(frame_min, frame_max)

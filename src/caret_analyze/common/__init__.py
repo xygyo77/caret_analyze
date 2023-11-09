@@ -29,6 +29,7 @@ from .summary import Summarizable, Summary
 from .type_check_decorator import type_check_decorator
 from .unique_list import UniqueList
 from .util import Util
+from .debug import loc
 
 __all__ = [
     'ClockConverter',
