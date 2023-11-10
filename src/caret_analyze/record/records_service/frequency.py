@@ -95,6 +95,7 @@ class Frequency:
             - {frequency_column}
 
         """
+        print(f"### Frequency::to_records() {converter=} ###")
         records = self._create_empty_records()
         if not self._target_timestamps:
             return records
@@ -102,7 +103,8 @@ class Frequency:
         timestamp_list, frequency_list = self._get_frequency_with_timestamp(
             interval_ns,
             base_timestamp or self._target_timestamps[0],
-            until_timestamp or self._target_timestamps[-1]
+            until_timestamp or self._target_timestamps[-1],
+            converter
         )
         for ts, freq in zip(timestamp_list, frequency_list):
             record = {
@@ -124,13 +126,19 @@ class Frequency:
         self,
         interval_ns: int,
         base_timestamp: int,
-        until_timestamp: int
+        until_timestamp: int,
+        converter: ClockConverter | None = None
     ) -> tuple[list[int], list[int]]:
+        if converter:
+            base_timestamp = round(converter.convert(base_timestamp))
+            until_timestamp = round(converter.convert(until_timestamp))
         timestamp_list: list[int] = [base_timestamp]
         frequency_list: list[int] = [0]
         interval_start_time = base_timestamp
 
         for timestamp in self._target_timestamps:
+            if converter:
+                timestamp = round(converter.convert(timestamp))
             if timestamp < base_timestamp:
                 continue
             while not (interval_start_time <= timestamp < interval_start_time + interval_ns):
