@@ -268,29 +268,52 @@ class ResponseMapAll:
                     self._end_timestamps[idx] = end_ts
                     self._records[idx] = record
 
-    def to_all_records(self) -> RecordsInterface:
+    def to_all_records(
+        self,
+        converter: ClockConverter | None = None
+    ) -> RecordsInterface:
+        print(f"### ResponseTime::to_all_records() {converter=}###")
         records = self._create_empty_records()
 
         for start_ts, end_ts in zip(self._start_timestamps, self._end_timestamps):
-            record = {
-                self._start_column: start_ts,
-                'response_time': end_ts - start_ts
-            }
+            if converter:
+                record = {
+                    self._start_column: round(converter.convert(start_ts)),
+                    'response_time': round(converter.convert(end_ts) - converter.convert(start_ts))
+                }
+            else:
+                record = {
+                    self._start_column: start_ts,
+                    'response_time': end_ts - start_ts
+                }
             records.append(record)
 
         return records
 
-    def to_worst_case_records(self) -> RecordsInterface:
+    def to_worst_case_records(
+        self,
+        converter: ClockConverter | None = None
+    ) -> RecordsInterface:
+        print(f"### ResponseTime::to_worst_case_records() {converter=}###")
         end_timestamps: list[int] = []
         start_timestamps: list[int] = []
         for start_ts, end_ts in zip(self._start_timestamps, self._end_timestamps):
             if end_ts not in end_timestamps:
-                start_timestamps.append(start_ts)
-                end_timestamps.append(end_ts)
+                if converter:
+                    start_timestamps.append(round(converter.convert(start_ts)))
+                    end_timestamps.append(round(converter.convert(end_ts)))
+                else:
+                    start_timestamps.append(start_ts)
+                    end_timestamps.append(end_ts)
             else:
-                idx = end_timestamps.index(end_ts)
-                if start_ts < start_timestamps[idx]:
-                    start_timestamps[idx] = start_ts
+                if converter:
+                    idx = end_timestamps.index(round(converter.convert(end_ts)))
+                    if start_ts < start_timestamps[idx]:
+                        start_timestamps[idx] = round(converter.convert(start_ts))
+                else:
+                    idx = end_timestamps.index(end_ts)
+                    if start_ts < start_timestamps[idx]:
+                        start_timestamps[idx] = start_ts
 
         records = self._create_empty_records()
         for start_ts, end_ts in zip(start_timestamps, end_timestamps):
@@ -473,6 +496,7 @@ class ResponseTime:
             - {'response_time'}
 
         """
+        print(f"### ResponseTime::to_all_records() {converter=}###")
         return self._response_map_all.to_all_records(converter)
 
     def to_worst_case_records(
@@ -516,7 +540,7 @@ class ResponseTime:
             - {'response_time'}
 
         """
-        print(f"### ResponseTime::to_best_case_records ###")
+        print(f"### ResponseTime::to_best_case_records {converter=} ###")
         return self._timeseries.to_best_case_records(converter)
 
     def to_worst_with_external_latency_case_records(        self,
