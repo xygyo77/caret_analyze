@@ -25,6 +25,7 @@ from ..column import ColumnValue
 from ..interface import RecordInterface, RecordsInterface
 from ..record_factory import RecordFactory, RecordsFactory
 from ...exceptions import InvalidRecordsError
+from ...common import ClockConverter
 
 
 class TimeRange:
@@ -452,7 +453,10 @@ class ResponseTime:
         self._timeseries = ResponseTimeseries(self._records)
         self._histogram = ResponseHistogram(self._records, self._timeseries)
 
-    def to_all_records(self) -> RecordsInterface:
+    def to_all_records(
+        self,
+        converter: ClockConverter | None = None
+    ) -> RecordsInterface:
         """
         Calculate the data of all records for response time.
 
@@ -469,9 +473,12 @@ class ResponseTime:
             - {'response_time'}
 
         """
-        return self._response_map_all.to_all_records()
+        return self._response_map_all.to_all_records(converter)
 
-    def to_worst_case_records(self) -> RecordsInterface:
+    def to_worst_case_records(
+        self,
+        converter: ClockConverter | None = None
+    ) -> RecordsInterface:
         """
         Calculate data of the worst case records for response time.
 
@@ -488,9 +495,11 @@ class ResponseTime:
             - {'response_time'}
 
         """
-        return self._response_map_all.to_worst_case_records()
+        return self._response_map_all.to_worst_case_records(converter)
 
-    def to_best_case_records(self) -> RecordsInterface:
+    def to_best_case_records(        self,
+        converter: ClockConverter | None = None
+    ) -> RecordsInterface:
         """
         Calculate data of the best case records for response time.
 
@@ -507,9 +516,12 @@ class ResponseTime:
             - {'response_time'}
 
         """
-        return self._timeseries.to_best_case_records()
+        print(f"### ResponseTime::to_best_case_records ###")
+        return self._timeseries.to_best_case_records(converter)
 
-    def to_worst_with_external_latency_case_records(self) -> RecordsInterface:
+    def to_worst_with_external_latency_case_records(        self,
+        converter: ClockConverter | None = None
+    ) -> RecordsInterface:
         """
         Calculate data of the worst-with-external-latency case records for response time.
 
@@ -527,7 +539,7 @@ class ResponseTime:
             - {'response_time'}
 
         """
-        return self._timeseries.to_worst_with_external_latency_case_records()
+        return self._timeseries.to_worst_with_external_latency_case_records(converter)
 
     def to_all_stacked_bar(self) -> RecordsInterface:
         """
@@ -963,6 +975,7 @@ class ResponseTimeseries:
         response_records: ResponseRecords
     ) -> None:
         self._records = response_records
+        print(f"### ResponseTimeseries::__init__ ###")
 
     def to_best_case_timeseries(self):
         records = self._records.to_range_records()
@@ -977,6 +990,7 @@ class ResponseTimeseries:
         return self._to_timeseries(input_column, output_column)
 
     def _to_timeseries(self, input_column, output_column):
+        print(f"### ResponseTimeseries::_to_timeseries ###")
         records = self._records.to_range_records()
 
         t_ = records.get_column_series(input_column)
@@ -986,22 +1000,24 @@ class ResponseTimeseries:
         t_out = np.array(t_out_, dtype=np.int64)
 
         latency = t_out - t_in
-
+        print(f"{t_in=} : {latency=}")
         return t_in, latency
 
-    def to_best_case_records(self) -> RecordsInterface:
+    def to_best_case_records( self, converter) -> RecordsInterface:
+        print(f"### ResponseTimeseries::to_best_case_records ###")
         records = self._records.to_range_records()
         input_column = records.columns[1]
         output_column = records.columns[-1]
-        return self._to_records(input_column, output_column)
+        return self._to_records(input_column, output_column, converter)
 
-    def to_worst_with_external_latency_case_records(self) -> RecordsInterface:
+    def to_worst_with_external_latency_case_records( self, converter) -> RecordsInterface:
         records = self._records.to_range_records()
         input_column = records.columns[0]
         output_column = records.columns[-1]
-        return self._to_records(input_column, output_column)
+        return self._to_records(input_column, output_column, converter)
 
-    def _to_records(self, input_column, output_column) -> RecordsInterface:
+    def _to_records(self, input_column, output_column, converter) -> RecordsInterface:
+        print(f"### ResponseTimeseries::_to_records() {converter=}")
         records: RecordsInterface = self._create_empty_records(input_column)
 
         range_records = self._records.to_range_records()
@@ -1011,6 +1027,9 @@ class ResponseTimeseries:
         for start_ts, end_ts in zip(t_in, t_out):
             if start_ts is None or end_ts is None:
                 continue
+            if converter:
+                start_ts = round(converter.convert(start_ts))
+                end_ts = round(converter.convert(end_ts))
             record = {
                 input_column: start_ts,
                 'response_time': end_ts - start_ts
@@ -1034,7 +1053,8 @@ class ResponseHistogram:
     def __init__(
         self,
         response_records: ResponseRecords,
-        response_timeseries: ResponseTimeseries
+        response_timeseries: ResponseTimeseries,
+        converter: ClockConverter | None = None
     ) -> None:
         """
         Construct an instance.
@@ -1049,6 +1069,8 @@ class ResponseHistogram:
         """
         self._response_records = response_records
         self._timeseries = response_timeseries
+        self._converter = converter
+        print(f"### ResponseHistogram::__init__ ###")
 
     def to_histogram(
         self,
@@ -1088,6 +1110,12 @@ class ResponseHistogram:
         input_min_column = records.columns[0]
         input_max_column = records.columns[1]
         output_column = records.columns[2]
+        print(f"### ResponseHistogram::to_histogram ###")
+        converter = self._converter
+        if converter:
+            input_min_column = converter.convert(input_min_column)
+            input_max_column = converter.convert(input_max_column)
+            output_column = converter.convert(output_column)
 
         latency_ns = []
 
@@ -1099,6 +1127,11 @@ class ResponseHistogram:
             output_time = record.get(output_column)
             input_time_min = record.get(input_min_column)
             input_time_max = record.get(input_max_column)
+            if converter:
+                output_time = converter.convert(output_time)
+                input_time_min = converter.convert(input_time_min)
+                input_time_max = converter.convert(input_time_max)
+
             bin_sized_latency_min = to_bin_sized(output_time - input_time_max)
 
             for input_time in range(input_time_min, input_time_max + binsize_ns, binsize_ns):
@@ -1191,5 +1224,6 @@ class ResponseHistogram:
         range_min = math.floor(min(latency_ns) / binsize_ns) * binsize_ns
         range_max = math.ceil(max(latency_ns) / binsize_ns) * binsize_ns + binsize_ns
         bin_num = math.ceil((range_max - range_min) / binsize_ns)
+        print(f"### _to_histogram ### {range_min=} {range_min=}")
         return np.histogram(
             latency_ns, bins=bin_num, range=(range_min, range_max), density=density)

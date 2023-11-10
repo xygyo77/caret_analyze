@@ -35,6 +35,7 @@ from .util import ColorSelectorFactory, LegendManager
 from ..visualize_lib_interface import VisualizeLibInterface
 from ...metrics_base import MetricsBase
 from ....runtime import CallbackBase, CallbackGroup, Communication, Path, Publisher, Subscription
+from ....common import ClockConverter
 
 TimeSeriesTypes = CallbackBase | Communication | (Publisher | Subscription) | Path
 MetricsTypes = Frequency | Latency | Period | ResponseTime
@@ -180,8 +181,10 @@ class Bokeh(VisualizeLibInterface):
         self,
         metrics: list[MetricsTypes],
         target_objects: Sequence[HistTypes],
+        xaxis_type: str,
         data_type: str,
-        case: str | None = None
+        case: str | None = None,
+        converter: ClockConverter | None = None
     ) -> Figure:
         """
         Get a histogram figure.
@@ -206,6 +209,10 @@ class Bokeh(VisualizeLibInterface):
             Figure of histogram.
 
         """
+        print(f"### Bokeh::histogram {xaxis_type=} {converter=}###")
+        if xaxis_type != 'sim_time':
+            converter = None
+        print(f"### Bokeh::histogram {xaxis_type=} {converter=}###")
         legend_manager = LegendManager()
         if data_type == 'frequency':
             x_label = data_type + ' [Hz]'
@@ -223,26 +230,26 @@ class Bokeh(VisualizeLibInterface):
         if data_type == 'response_time':
             if case == 'all':
                 data_list = [
-                    [_ for _ in m.to_all_records().get_column_series(data_type)
+                    [_ for _ in m.to_all_records(converter).get_column_series(data_type)
                      if _ is not None]
                     for m in metrics if isinstance(m, ResponseTime)
                     ]
             elif case == 'best':
                 data_list = [
-                    [_ for _ in m.to_best_case_records().get_column_series(data_type)
+                    [_ for _ in m.to_best_case_records(converter).get_column_series(data_type)
                      if _ is not None]
                     for m in metrics if isinstance(m, ResponseTime)
                     ]
             elif case == 'worst':
                 data_list = [
-                    [_ for _ in m.to_worst_case_records().get_column_series(data_type)
+                    [_ for _ in m.to_worst_case_records(converter).get_column_series(data_type)
                      if _ is not None]
                     for m in metrics if isinstance(m, ResponseTime)
                     ]
             elif case == 'worst-with-external-latency':
                 data_list = [
                     [_ for _ in
-                     m.to_worst_with_external_latency_case_records().get_column_series(data_type)
+                     m.to_worst_with_external_latency_case_records(converter).get_column_series(data_type)
                      if _ is not None]
                     for m in metrics if isinstance(m, ResponseTime)
                     ]
@@ -250,10 +257,16 @@ class Bokeh(VisualizeLibInterface):
                 raise ValueError('optional argument "case" must be following: \
                                  "all", "best", "worst", "worst-with-external-latency".')
         else:
-            data_list = [
-                [_ for _ in m.to_records().get_column_series(data_type) if _ is not None]
-                for m in metrics if not isinstance(m, ResponseTime)
-                ]
+            if data_type == 'frequency':
+                data_list = [
+                    [_ for _ in m.to_records(converter=converter).get_column_series(data_type) if _ is not None]
+                    for m in metrics if not isinstance(m, ResponseTime)
+                    ]
+            else:
+                data_list = [
+                    [_ for _ in m.to_records(converter).get_column_series(data_type) if _ is not None]
+                    for m in metrics if not isinstance(m, ResponseTime)
+                    ]
 
         color_selector = ColorSelectorFactory.create_instance('unique')
 

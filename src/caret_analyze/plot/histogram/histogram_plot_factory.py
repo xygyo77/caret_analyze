@@ -23,6 +23,7 @@ from ..visualize_lib import VisualizeLibInterface
 from ...common import type_check_decorator
 from ...exceptions import UnsupportedTypeError
 from ...runtime import CallbackBase, Communication, Path
+from ...record import Range
 
 MetricsType = Frequency | Latency | Period | ResponseTime
 HistTypes = CallbackBase | Communication | Path
@@ -65,6 +66,25 @@ class HistogramPlotFactory:
             Argument metrics is not "frequency", "latency", or "period".
 
         """
+        converter: ClockConverter | None = None
+        records_range = Range([to.to_records() for to in target_objects])
+        frame_min, frame_max = records_range.get_range()
+        if isinstance(target_objects[0], Communication):
+            for comm in self._target_objects:
+                assert isinstance(comm, Communication)
+                if comm._callback_subscription:
+                    converter_cb = comm._callback_subscription
+                    break
+            provider = converter_cb._provider
+            converter = provider.get_sim_time_converter(frame_min, frame_max)
+        elif isinstance(target_objects[0], Path):
+            assert len(target_objects[0].child) > 0
+            provider = target_objects[0].child[0]._provider
+            converter = provider.get_sim_time_converter(frame_min, frame_max)
+        else:
+            provider = target_objects[0]._provider
+            converter = provider.get_sim_time_converter(frame_min, frame_max)
+
         if metrics_name == 'frequency':
             metrics_frequency: list[MetricsType] =\
                   [Frequency(target_object.to_records()) for target_object in target_objects]
@@ -72,7 +92,8 @@ class HistogramPlotFactory:
                 metrics_frequency,
                 visualize_lib,
                 target_objects,
-                metrics_name
+                metrics_name,
+                converter=converter
                 )
         elif metrics_name == 'latency':
             metrics_latency: list[MetricsType] =\
@@ -81,7 +102,8 @@ class HistogramPlotFactory:
                 metrics_latency,
                 visualize_lib,
                 target_objects,
-                metrics_name
+                metrics_name,
+                converter=converter
                 )
         elif metrics_name == 'period':
             metrics_period: list[MetricsType] =\
@@ -90,9 +112,11 @@ class HistogramPlotFactory:
                 metrics_period,
                 visualize_lib,
                 target_objects,
-                metrics_name
+                metrics_name,
+                converter=converter
                 )
         elif metrics_name == 'response_time':
+            print(f"HistogramPlotFactory::create_instance---response_time")
             metrics_response_time: list[MetricsType] =\
                   [ResponseTime(target_object.to_records()) for target_object in target_objects]
             return HistogramPlot(
@@ -100,7 +124,8 @@ class HistogramPlotFactory:
                 visualize_lib,
                 target_objects,
                 metrics_name,
-                case
+                case=case,
+                converter=converter
                 )
         else:
             raise UnsupportedTypeError(

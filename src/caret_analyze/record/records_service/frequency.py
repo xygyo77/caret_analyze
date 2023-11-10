@@ -19,6 +19,7 @@ from collections.abc import Callable
 from ..column import ColumnValue
 from ..interface import RecordsInterface
 from ..record_factory import RecordsFactory
+from ...common import ClockConverter
 
 
 class Frequency:
@@ -68,6 +69,7 @@ class Frequency:
         interval_ns: int = 1000000000,
         base_timestamp: int | None = None,
         until_timestamp: int | None = None,
+        converter: ClockConverter | None = None
     ) -> RecordsInterface:
         """
         Calculate frequency records.

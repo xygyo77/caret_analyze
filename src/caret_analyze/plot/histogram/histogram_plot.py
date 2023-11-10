@@ -26,6 +26,7 @@ from ..plot_base import PlotBase
 from ..visualize_lib import VisualizeLibInterface
 from ...exceptions import UnsupportedTypeError
 from ...runtime import CallbackBase, Communication, Path
+from ...common import ClockConverter
 
 MetricsTypes = Frequency | Latency | Period | ResponseTime
 HistTypes = CallbackBase | Communication | Path
@@ -40,13 +41,15 @@ class HistogramPlot(PlotBase):
         visualize_lib: VisualizeLibInterface,
         target_objects: Sequence[HistTypes],
         data_type: str,
-        case: str | None = None
+        case: str | None = None,
+        converter: ClockConverter | None = None
     ) -> None:
         self._metrics = metrics
         self._visualize_lib = visualize_lib
         self._target_objects = target_objects
         self._data_type = data_type
         self._case = case
+        self._converter = converter
 
     def to_dataframe(
         self,
@@ -98,6 +101,7 @@ class HistogramPlot(PlotBase):
             Argument xaxis_type is not "system_time", "index", or "sim_time".
 
         """
+        print(f"### HistogramPlot::figure() ###")
         # Set default value
         xaxis_type = xaxis_type or 'system_time'
         ywheel_zoom = ywheel_zoom if ywheel_zoom is not None else True
@@ -109,8 +113,10 @@ class HistogramPlot(PlotBase):
         return self._visualize_lib.histogram(
             self._metrics,
             self._target_objects,
+            xaxis_type,
             self._data_type,
-            self._case
+            self._case,
+            self._converter
             )
 
     def _validate_xaxis_type(self, xaxis_type: str) -> None:
