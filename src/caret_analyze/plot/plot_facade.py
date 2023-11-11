@@ -153,7 +153,7 @@ class Plot:
 
     @staticmethod
     def create_latency_timeseries_plot(
-        *target_objects: CallbackBase | Communication
+        *target_objects: CallbackBase | Communication | Path
     ) -> PlotBase:
         """
         Get latency timeseries plot instance.
