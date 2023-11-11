@@ -87,10 +87,12 @@ class GraphAttr:
         self.edges = edges
 
 
-def to_label(latency: np.ndarray) -> str:
+def to_label(latency: np.ndarray, time_id: str) -> str:
     latency = latency[[not pd.isnull(_) for _ in latency]]
+    lstr = ' - simulation time -' if time_id == 'sim_time' else ' - system time -'
     label = (
-        'min: {:.2f} ms\n'.format(np.min(latency * 1.0e-6))
+        lstr
+        + '\nmin: {:.2f} ms\n'.format(np.min(latency * 1.0e-6))
         + 'avg: {:.2f} ms\n'.format(np.average(latency * 1.0e-6))
         + 'max: {:.2f} ms'.format(np.max(latency * 1.0e-6))
     )
@@ -150,12 +152,12 @@ def get_attr_node(
         if i == 0 and path.include_first_callback:
             first_cb_columns = path.column_names[0:2]
             latency = calc_latency_from_path_df(first_cb_columns)
-            label += '\n' + to_label(latency)
+            label += '\n' + to_label(latency, time_id)
 
         elif i == len(path.node_paths)-1 and path.include_last_callback:
             last_cb_columns = path.column_names[-2:]
             latency = calc_latency_from_path_df(last_cb_columns)
-            label += '\n' + to_label(latency)
+            label += '\n' + to_label(latency, time_id)
 
         elif node_path.column_names != []:
             _, latency = node_path.to_timeseries(
@@ -165,7 +167,7 @@ def get_attr_node(
                 rstrip_s=rstrip_s,
                 records_provider=provider
             )
-            label += '\n' + to_label(latency)
+            label += '\n' + to_label(latency, time_id)
 
         graph_nodes.append(GraphNode(node_name, label))
 
@@ -183,7 +185,7 @@ def get_attr_node(
             records_provider=provider
         )
         label = comm_path.topic_name
-        label += '\n' + to_label(pubsub_latency)
+        label += '\n' + to_label(pubsub_latency, time_id)
 
         graph_edges.append(
             GraphEdge(comm_path.publish_node_name, comm_path.subscribe_node_name, label))
@@ -218,7 +220,7 @@ def get_attr_end_to_end(
                 rstrip_s=rstrip_s,
                 records_provider=provider
             )
-            label += '\n' + to_label(latency)
+            label += '\n' + to_label(latency, time_id)
         graph_nodes.append(GraphNode(node_name, label))
 
     _, latency = path.to_timeseries(
@@ -233,7 +235,7 @@ def get_attr_end_to_end(
     end_node_name = node_paths[-1].node_name
     graph_edges: list[GraphEdge] = []
     graph_edges.append(
-        GraphEdge(start_node_name, end_node_name, to_label(latency))
+        GraphEdge(start_node_name, end_node_name, to_label(latency, time_id))
     )
 
     return GraphAttr(graph_nodes, graph_edges)

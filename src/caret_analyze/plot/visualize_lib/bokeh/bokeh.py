@@ -212,9 +212,7 @@ class Bokeh(VisualizeLibInterface):
         print(f"### Bokeh::histogram {xaxis_type=} {converter=}###")
         if xaxis_type != 'sim_time':
             converter = None
-            label_str = ' - system time -'
-        else:
-            label_str = ' - simulation time -'
+        label_str = ' - simulation time -' if xaxis_type == 'sim_time' else ' - system time -'
         print(f"### Bokeh::histogram {xaxis_type=} {converter=}###")
         legend_manager = LegendManager()
         if data_type == 'frequency':
