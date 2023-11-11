@@ -212,6 +212,9 @@ class Bokeh(VisualizeLibInterface):
         print(f"### Bokeh::histogram {xaxis_type=} {converter=}###")
         if xaxis_type != 'sim_time':
             converter = None
+            label_str = ' - system time -'
+        else:
+            label_str = ' - simulation time -'
         print(f"### Bokeh::histogram {xaxis_type=} {converter=}###")
         legend_manager = LegendManager()
         if data_type == 'frequency':
@@ -221,6 +224,7 @@ class Bokeh(VisualizeLibInterface):
         else:
             raise NotImplementedError()
 
+        x_label = x_label + label_str
         plot: Figure = Figure(
             title=data_type if case is None else f'{data_type} --- {case} case ---',
             x_axis_label=x_label, y_axis_label='Probability', width=800

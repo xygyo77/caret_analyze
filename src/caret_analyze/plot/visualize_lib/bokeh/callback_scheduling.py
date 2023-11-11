@@ -216,9 +216,14 @@ class CallbackSchedRectSource:
             k: [] for k in (['x', 'y', 'width', 'height'] + self._hover_keys.to_list())
         })
         latency_table = callback.to_dataframe(shaper=self._clip)
+        converter = self._converter
         for row in latency_table.itertuples():
-            callback_start = self._converter.convert(row[1]) if self._converter else row[1]
-            callback_end = self._converter.convert(row[-1]) if self._converter else row[-1]
+            if converter: 
+                callback_start = int(converter.convert(row[1]))
+                callback_end = int(converter.convert(row[-1]))
+            else:
+                callback_start = row[1]
+                callback_end = row[-1]
             rect = RectValues(
                 callback_start, callback_end,
                 (self._rect_y_base-self.RECT_HEIGHT),
@@ -232,8 +237,8 @@ class CallbackSchedRectSource:
                     'height': [rect.height],
                 },
                 **self._hover_source.generate(callback, {
-                    'callback_start': f'callback_start = {callback_start} [ns]',
-                    'callback_end': f'callback_end = {callback_end} [ns]',
+                    'callback_start': f'callback_start = {callback_start * 1.0e-6} [ms]',
+                    'callback_end': f'callback_end = {callback_end * 1.0e-6} [ms]',
                     'latency': f'latency = {(callback_end - callback_start) * 1.0e-6} [ms]',
                     'legend_label': f'legend_label = {self._legend_manager.get_label(callback)}'
                 })  # type: ignore

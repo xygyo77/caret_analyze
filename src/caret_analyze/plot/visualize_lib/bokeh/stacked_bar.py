@@ -121,7 +121,6 @@ class StackedBarSource:
         x_label: str,
         converter: ClockConverter | None = None
     ) -> None:
-        self._converter = converter
         x_width_list: list[float] = []
 
         # Convert the data unit to second

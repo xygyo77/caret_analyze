@@ -21,6 +21,9 @@ import pandas as pd
 from ...common import type_check_decorator
 from ...exceptions import InvalidArgumentError
 from ...runtime.path import Path
+from ...common import ClockConverter
+from ...record.data_frame_shaper import Clip, Strip
+from ...infra.interface import RecordsProvider
 
 
 @type_check_decorator
@@ -31,6 +34,7 @@ def chain_latency(
     treat_drop_as_delay=False,
     lstrip_s=0,
     rstrip_s=0,
+    time_id: str | None = 'system_time',
 ) -> Digraph | None:
     granularity = granularity or 'node'
     if granularity not in ['node', 'end-to-end']:
@@ -42,9 +46,9 @@ def chain_latency(
     graph.attr('node', shape='box')
 
     if granularity == 'node':
-        graph_attr = get_attr_node(path, treat_drop_as_delay, lstrip_s, rstrip_s)
+        graph_attr = get_attr_node(path, treat_drop_as_delay, lstrip_s, rstrip_s, time_id)
     elif granularity == 'end-to-end':
-        graph_attr = get_attr_end_to_end(path, treat_drop_as_delay, lstrip_s, rstrip_s)
+        graph_attr = get_attr_end_to_end(path, treat_drop_as_delay, lstrip_s, rstrip_s, time_id)
 
     for node_attr in graph_attr.nodes:
         graph.node(node_attr.node, node_attr.label)
@@ -97,7 +101,8 @@ def get_attr_node(
     path: Path,
     treat_drop_as_delay: bool,
     lstrip_s: float,
-    rstrip_s: float
+    rstrip_s: float,
+    time_id: str
 ) -> GraphAttr:
     def calc_latency_from_path_df(target_columns: list[str]) -> np.ndarray:
         target_df = path.to_dataframe(
@@ -106,8 +111,24 @@ def get_attr_node(
             lstrip_s=lstrip_s,
             rstrip_s=rstrip_s,
         )[target_columns]
-        source_stamps_ns = np.array(target_df.iloc[:, 0].values)
-        dest_stamps_ns = np.array(target_df.iloc[:, -1].values)
+        strip = Strip(lstrip_s, rstrip_s)
+        clip = strip.to_clip(target_df)
+        target_df = clip.execute(target_df)
+
+        frame_min: float = clip.min_ns
+        frame_max: float = clip.max_ns
+        converter: ClockConverter | None = None
+        if time_id == 'sim_time':
+            assert len(path.child) > 0
+            provider = path.child[0]._provider  # type: ignore
+            converter = provider.get_sim_time_converter(frame_min, frame_max)
+        if converter:
+            source_stamps_ns = np.array(converter.convert(target_df.iloc[:, 0].values))
+            dest_stamps_ns = np.array(converter.convert(target_df.iloc[:, -1].values))
+        else:
+            source_stamps_ns = np.array(target_df.iloc[:, 0].values)
+            dest_stamps_ns = np.array(target_df.iloc[:, -1].values)
+        
         latency_ns = dest_stamps_ns - source_stamps_ns
         if remove_dropped:
             latency_ns = latency_ns.astype('int64')
@@ -117,7 +138,12 @@ def get_attr_node(
 
     remove_dropped = False
 
+    provider: RecordsProvider | None = None
     for i, node_path in enumerate(path.node_paths):
+        if time_id == 'sim_time':
+            assert len(path.child) > 0
+            provider = path.child[0]._provider  # type: ignore
+
         node_name = node_path.node_name
         label = node_name
 
@@ -137,6 +163,7 @@ def get_attr_node(
                 treat_drop_as_delay=treat_drop_as_delay,
                 lstrip_s=lstrip_s,
                 rstrip_s=rstrip_s,
+                records_provider=provider
             )
             label += '\n' + to_label(latency)
 
@@ -144,11 +171,16 @@ def get_attr_node(
 
     graph_edges: list[GraphEdge] = []
     for comm_path in path.communications:
+        if time_id == 'sim_time':
+            assert len(path.child) > 0
+            provider = path.child[0]._provider  # type: ignore
+
         _, pubsub_latency = comm_path.to_timeseries(
             remove_dropped=remove_dropped,
             treat_drop_as_delay=treat_drop_as_delay,
             lstrip_s=lstrip_s,
             rstrip_s=rstrip_s,
+            records_provider=provider
         )
         label = comm_path.topic_name
         label += '\n' + to_label(pubsub_latency)
@@ -163,14 +195,19 @@ def get_attr_end_to_end(
     path: Path,
     treat_drop_as_delay: bool,
     lstrip_s: float,
-    rstrip_s: float
+    rstrip_s: float,
+    time_id: str
 ) -> GraphAttr:
     node_paths = path.node_paths
     remove_dropped = False
 
+    provider: RecordsProvider | None = None
     graph_nodes: list[GraphNode] = []
-
     for node_path in [node_paths[0], node_paths[-1]]:
+        if time_id == 'sim_time':
+            assert len(path.child) > 0
+            provider = path.child[0]._provider  # type: ignore
+            
         node_name = node_path.node_name
         label = node_name
         if len(node_path.column_names) != 0:
@@ -179,6 +216,7 @@ def get_attr_end_to_end(
                 treat_drop_as_delay=treat_drop_as_delay,
                 lstrip_s=lstrip_s,
                 rstrip_s=rstrip_s,
+                records_provider=provider
             )
             label += '\n' + to_label(latency)
         graph_nodes.append(GraphNode(node_name, label))
@@ -188,6 +226,7 @@ def get_attr_end_to_end(
         treat_drop_as_delay=treat_drop_as_delay,
         lstrip_s=lstrip_s,
         rstrip_s=rstrip_s,
+        records_provider=provider
     )
 
     start_node_name = node_paths[0].node_name

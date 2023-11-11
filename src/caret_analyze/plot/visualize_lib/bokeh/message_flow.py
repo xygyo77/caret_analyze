@@ -192,6 +192,8 @@ class MessageFlowRectSource:
                     if converter:
                         callback_start = converter.convert(callback_start)
                         callback_end = converter.convert(callback_end)
+                        if offset:
+                            offset._offset = converter.convert(offset.value) # type: ignore
                     rect = RectValues(callback_start, callback_end, y_min, y_max)
                     rect_source.stream({
                         **{'x': [rect.x],

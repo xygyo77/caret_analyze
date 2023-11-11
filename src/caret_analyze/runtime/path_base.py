@@ -24,6 +24,9 @@ import pandas as pd
 from ..exceptions import Error, InvalidRecordsError
 from ..record import RecordsFactory, RecordsInterface
 from ..record.data_frame_shaper import DataFrameShaper, Strip
+from ..common import ClockConverter
+from ..record.data_frame_shaper import Clip, Strip
+from ..infra.interface import RecordsProvider
 
 logger = getLogger(__name__)
 
@@ -155,6 +158,7 @@ class PathBase(metaclass=ABCMeta):
         rstrip_s: float = 0,
         *,
         shaper: DataFrameShaper | None = None,
+        records_provider: RecordsProvider | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate timeseries data.
@@ -182,6 +186,15 @@ class PathBase(metaclass=ABCMeta):
         """
         df = self.to_dataframe(
             remove_dropped, treat_drop_as_delay, lstrip_s, rstrip_s, shaper=shaper)
+        strip = Strip(lstrip_s, rstrip_s)
+        clip = strip.to_clip(df)
+        df = clip.execute(df)
+
+        frame_min: float = clip.min_ns
+        frame_max: float = clip.max_ns
+        converter: ClockConverter | None = None
+        if records_provider:
+            converter = records_provider.get_sim_time_converter(frame_min, frame_max)
 
         if len(df.columns) == 0:
             msg = 'Failed to calculate time series latency.'
@@ -192,8 +205,13 @@ class PathBase(metaclass=ABCMeta):
             msg = 'Failed to find any records that went through the path.'
             msg += 'There is a possibility that all records are lost.'
             raise InvalidRecordsError(msg)
-        source_stamps_ns = np.array(df.iloc[:, 0].values)
-        dest_stamps_ns = np.array(df.iloc[:, -1].values)
+
+        if converter:
+            source_stamps_ns = np.array(converter.convert(df.iloc[:, 0].values))
+            dest_stamps_ns = np.array(converter.convert(df.iloc[:, -1].values))
+        else:
+            source_stamps_ns = np.array(df.iloc[:, 0].values)
+            dest_stamps_ns = np.array(df.iloc[:, -1].values)
         t = source_stamps_ns
 
         latency_ns = dest_stamps_ns - source_stamps_ns
