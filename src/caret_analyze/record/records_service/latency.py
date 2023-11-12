@@ -76,7 +76,10 @@ class Latency:
         records = self._create_empty_records()
 
         for start_ts, end_ts in zip(self._start_timestamps, self._end_timestamps):
-            #! print(f"before : {type(start_ts)=} {start_ts=} {type(end_ts)=} {end_ts=}")
+            if start_ts > end_ts:
+                tmp = end_ts
+                end_ts = start_ts
+                start_ts = tmp
             if converter:
                 start_ts = round(converter.convert(start_ts))
                 end_ts = round(converter.convert(end_ts))
