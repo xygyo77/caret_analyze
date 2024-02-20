@@ -186,6 +186,7 @@ class Util:
 
         """
         similarity = 0.0
+        print(f"paths={items=}")
         for item in items:
             distance = difflib.SequenceMatcher(None, key(item), target_name).ratio()
             if (distance > similarity):

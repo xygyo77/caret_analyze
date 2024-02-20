@@ -255,11 +255,13 @@ class Architecture(Summarizable):
         node_filter: Callable[[str], bool] | None = None,
         communication_filter: Callable[[str], bool] | None = None,
     ) -> list[PathStructValue]:
+        from .util import ST, PT
         from .graph_search import NodePathSearcher
+        PT()
         for node_name in node_names:
             if node_name not in self.node_names:
                 raise ItemNotFoundError(f'Failed to find node. {node_name}')
-
+        PT()
         default_depth = 15  # When the depth is 15, the process takes only a few seconds.
         max_node_depth = max_node_depth or default_depth
 
@@ -280,13 +282,17 @@ class Architecture(Summarizable):
             )
             msg += msg_detail_page
             print(msg)
-
+        PT()
         # Search
         path_searcher = NodePathSearcher(
             tuple(self._nodes), tuple(self._communications), node_filter, communication_filter)
-        paths = [v.to_value() for v in
-                 path_searcher.search(*node_names, max_node_depth=max_node_depth)]
+        PT()
+        #paths = [v.to_value() for v in
+        #        path_searcher.search(*node_names, max_node_depth=max_node_depth)]
+        from tqdm import tqdm
+        paths = [v.to_value() for v in tqdm(path_searcher.search(*node_names, max_node_depth=max_node_depth))]
 
+        PT()
         # Print message after search
         msg = f'A search up to depth {max_node_depth} has been completed. '
         msg += (
@@ -296,7 +302,7 @@ class Architecture(Summarizable):
         msg += 'Also, if the number of paths is too large, consider filtering node/topic names. '
         msg += msg_detail_page
         print(msg)
-
+        PT()
         return paths
 
     @type_check_decorator

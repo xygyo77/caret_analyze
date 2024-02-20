@@ -43,3 +43,29 @@ def check_procedure(
 
     root_logger.removeHandler(handler)
     return tuple(v.to_value() for v in paths)
+
+import time, inspect, os
+ST_t = 0
+def ST():
+	global ST_t
+	if ST_t <= 0.0:
+		ST_t = time.perf_counter()
+
+def PT():
+	dt = time.perf_counter() - ST_t
+	frame = inspect.currentframe().f_back
+	path = os.path.basename(frame.f_code.co_filename)
+	print(f"{path} [{frame.f_code.co_name}] {frame.f_lineno}: {dt/1000:.3f} (ms)")
+	ST() 
+
+def location(depth=0):
+	"""Get execute loaction (file name & line number)
+
+	Args:
+		depth (int, optional): _description_. Defaults to 0.
+
+	Returns:
+		_type_: file name & line number
+	"""
+	frame = inspect.currentframe().f_back
+	return os.path.basename(frame.f_code.co_filename), frame.f_code.co_name, frame.f_lineno

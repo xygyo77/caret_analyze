@@ -296,6 +296,8 @@ class Graph:
 
         self._validate(*nodes)
 
+        from .util import ST, PT
+        PT()
         path_cores: list[list[GraphPathCore]] = []
         for start, goal in zip(nodes[:-1], nodes[1:]):
             path_cores.append(
@@ -306,6 +308,7 @@ class Graph:
                 )
             )
 
+        PT()
         paths: list[GraphPath] = []
         for path_cores_ in product(*path_cores):
             path = GraphPath()
@@ -317,6 +320,7 @@ class Graph:
                     path.append(GraphEdge(node_from, node_to, edge_core.label))
             paths.append(path)
 
+        PT()
         return paths
 
 
@@ -648,16 +652,19 @@ class NodePathSearcher:
     ) -> list[PathStruct]:
         paths: list[PathStruct] = []
 
+        from .util import ST, PT
         max_search_depth = max_node_depth or 0
-
+        PT()
         graph_nodes: list[GraphNode] = [GraphNode(node) for node in node_names]
         graph_paths = self._graph.search_paths(
             *graph_nodes,
             max_depth=max_search_depth)
 
+        PT()
         for graph_path in graph_paths:
             paths.append(self._to_path(graph_path))
 
+        PT()
         return paths
 
     def _find_node(self, node_name: str) -> NodeStruct:

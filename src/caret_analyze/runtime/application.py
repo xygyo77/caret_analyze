@@ -77,6 +77,7 @@ class Application(Summarizable):
         self._executors: list[Executor] = loaded.executors
         self._communications: list[Communication] = loaded.communications
         self._paths: list[Path] = loaded.paths
+        print(self._paths)
 
     @property
     def executors(self) -> list[Executor]:
