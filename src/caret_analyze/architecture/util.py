@@ -48,8 +48,7 @@ import time, inspect, os
 ST_t = 0
 def ST():
 	global ST_t
-	if ST_t <= 0.0:
-		ST_t = time.perf_counter()
+	ST_t = time.perf_counter()
 
 def PT():
 	dt = time.perf_counter() - ST_t

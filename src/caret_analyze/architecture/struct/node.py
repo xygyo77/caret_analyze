@@ -33,6 +33,7 @@ class NodeStruct():
     def __init__(
         self,
         node_name: str,
+        node_id: str,
         publishers: list[PublisherStruct],
         subscriptions_info: list[SubscriptionStruct],
         services: list[ServiceStruct],
@@ -42,6 +43,7 @@ class NodeStruct():
         variable_passings: list[VariablePassingStruct] | None,
     ) -> None:
         self._node_name = node_name
+        self._node_id = node_id
         self._publishers = publishers
         self._subscriptions = subscriptions_info
         self._services = services
@@ -53,6 +55,10 @@ class NodeStruct():
     @property
     def node_name(self) -> str:
         return self._node_name
+
+    @property
+    def node_id(self) -> str:
+        return self._node_id
 
     @property
     def publishers(self) -> list[PublisherStruct]:

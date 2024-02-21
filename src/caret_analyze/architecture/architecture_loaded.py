@@ -478,7 +478,7 @@ class NodeValuesLoaded():
             reader, callbacks_loaded, node).data
 
         node_struct = NodeStruct(
-            node.node_name, list(publishers), list(subscriptions), list(services),
+            node.node_name, node.node_id, list(publishers), list(subscriptions), list(services),
             list(timers), [], list(callback_groups), list(variable_passings)
         )
 
@@ -488,7 +488,7 @@ class NodeValuesLoaded():
                                                         reader, 
                                                         max_construction_order=max_construction_order)
             node_path_added = NodeStruct(
-                node_struct.node_name, node_struct.publishers,
+                node_struct.node_name, node.node_id, node_struct.publishers,
                 node_struct.subscriptions,
                 node_struct.services,
                 node_struct.timers,
@@ -1621,7 +1621,8 @@ class CallbackPathSearched():
                                 logger.warn(f'skip due to callback construction_order over'
                                             f'({max_construction_order}): {node.node_name}')
                             """
-                            skip_nodes.append(node.node_name)
+                            #skip_nodes.append(node.node_name)
+                            skip_nodes.append(node.node_id)
                             continue
                 searched_paths = searcher.search(write_callback, read_callback, node)
                 for path in searched_paths:

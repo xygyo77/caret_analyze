@@ -149,8 +149,6 @@ class EventCounter:
 
     @staticmethod
     def _build_count_df(data: Ros2DataModel) -> pd.DataFrame:
-        from ...architecture.util import ST, PT
-        PT()
         # TODO(hsgwa): Definitions on tracepoint types are scattered. Refactor required.
         trace_point_and_df = {
             'ros2:rcl_init': data.contexts.df,
@@ -210,7 +208,6 @@ class EventCounter:
             'ros2_caret:caret_init': data.caret_init.df,
         }
         #  'ros2_caret:rmw_implementation': ,
-        PT()
         sub_handle_to_topic_name: dict[int, str] = {}
         sub_handle_to_node_name: dict[int, str] = {}
         pub_handle_to_topic_name: dict[int, str] = {}
@@ -229,34 +226,28 @@ class EventCounter:
             else:
                 return ns + '/' + name
 
-        PT()
         for handler, row in data.nodes.df.iterrows():
             node_handle_to_node_name[handler] = ns_and_node_name(row['namespace'], row['name'])
 
-        PT()
         for handler, row in data.publishers.df.iterrows():
             pub_handle_to_node_name[handler] = \
                 node_handle_to_node_name.get(row['node_handle'], '-')
             pub_handle_to_topic_name[handler] = row['topic_name']
 
-        PT()
         for handler, row in data.subscriptions.df.iterrows():
             sub_handle_to_node_name[handler] = \
                 node_handle_to_node_name.get(row['node_handle'], '-')
             sub_handle_to_topic_name[handler] = row['topic_name']
 
-        PT()
         for handler, row in data.timer_node_links.df.iterrows():
             timer_handle_to_node_name[handler] = \
                 node_handle_to_node_name.get(row['node_handle'], '-')
 
-        PT()
         for sub, row in data.subscription_objects.df.iterrows():
             sub_handle = row['subscription_handle']
             sub_to_topic_name[sub] = sub_handle_to_topic_name.get(sub_handle, '-')
             sub_to_node_name[sub] = sub_handle_to_node_name.get(sub_handle, '-')
 
-        PT()
         for handler, row in data.callback_objects.df.iterrows():
             if handler in sub_to_topic_name:
                 sub_cb_to_node_name[row['callback_object']] = sub_to_node_name.get(handler, '-')
@@ -265,21 +256,18 @@ class EventCounter:
                 timer_cb_to_node_name[row['callback_object']] = \
                     timer_handle_to_node_name.get(handler, '-')
 
-        PT()
         tilde_pub_to_topic_name: dict[int, str] = {}
         tilde_pub_to_node_name: dict[int, str] = {}
         for handler, row in data.tilde_publishers.df.iterrows():
             tilde_pub_to_node_name[handler] = row['node_name']
             tilde_pub_to_topic_name[handler] = row['topic_name']
 
-        PT()
         tilde_sub_to_topic_name: dict[int, str] = {}
         tilde_sub_to_node_name: dict[int, str] = {}
         for handler, row in data.tilde_subscriptions.df.iterrows():
             tilde_sub_to_node_name[handler] = row['node_name']
             tilde_sub_to_topic_name[handler] = row['topic_name']
 
-        PT()
         count_dict = []
         group_keys = [
             'callback_object', 'publisher_handle', 'subscription_handle',
@@ -315,7 +303,6 @@ class EventCounter:
             else:
                 df['tilde_subscription'] = '-'
 
-            PT()
             for key, group in df.groupby(group_keys):
                 node_name = '-'
                 topic_name = '-'
@@ -351,6 +338,5 @@ class EventCounter:
                         'trace_point': trace_point
                     }
                 )
-        PT()
 
         return pd.DataFrame.from_dict(count_dict)
