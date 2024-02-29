@@ -18,6 +18,7 @@ from caret_analyze.architecture.architecture_loaded import (ArchitectureLoaded,
                                                             CallbacksLoaded,
                                                             CommValuesLoaded,
                                                             ExecutorValuesLoaded,
+                                                            MAX_CONSTRUCTION_ORDER,
                                                             NodePathCreated,
                                                             NodeValuesLoaded,
                                                             PathValuesLoaded,
@@ -237,7 +238,11 @@ class TestNodesInfoLoaded():
         mocker.patch.object(
             reader_mock, 'get_nodes', return_value=[node_b, node_c, node_a])
 
-        def create_node(node, reader):
+        def create_node(
+            node,
+            reader,
+            max_construction_order: int = MAX_CONSTRUCTION_ORDER
+        ):
             node_mock = mocker.Mock(spec=NodeStruct)
             cb_loaded_mock = mocker.Mock(spec=CallbacksLoaded)
             cbg_loaded_mock = mocker.Mock(spec=CallbackGroupsLoaded)
@@ -717,6 +722,7 @@ class TestNodePathLoaded:
                      return_value=searcher_mock)
 
         callback_mock = mocker.Mock(spec=CallbackStruct)
+        callback_mock.construction_order = MAX_CONSTRUCTION_ORDER - 1
         node_path_mock = mocker.Mock(NodePathStruct)
         mocker.patch.object(searcher_mock, 'search',
                             return_value=[node_path_mock])
@@ -726,7 +732,7 @@ class TestNodePathLoaded:
         callbacks = (callback_mock, callback_mock)
         node_mock = mocker.Mock(spec=NodeStruct)
         mocker.patch.object(node_mock, 'callbacks', callbacks)
-        searched = CallbackPathSearched(node_mock)
+        searched = CallbackPathSearched(node_mock, MAX_CONSTRUCTION_ORDER)
 
         import itertools
         product = list(itertools.product(callbacks, callbacks))

@@ -18,7 +18,7 @@ from collections.abc import Callable, Collection, Sequence
 import logging
 
 from .architecture_exporter import ArchitectureExporter
-from .architecture_loaded import NodeValuesLoaded
+from .architecture_loaded import MAX_CONSTRUCTION_ORDER, NodeValuesLoaded
 from .combine_path import CombinePath
 
 from .reader_interface import ArchitectureReader, IGNORE_TOPICS
@@ -42,6 +42,7 @@ class Architecture(Summarizable):
         self,
         file_type: str,
         file_path: str,
+        max_construction_order: int = MAX_CONSTRUCTION_ORDER
     ) -> None:
         from .architecture_reader_factory import ArchitectureReaderFactory
         from .architecture_loaded import ArchitectureLoaded
@@ -51,7 +52,9 @@ class Architecture(Summarizable):
 
         reader = ArchitectureReaderFactory.create_instance(
             file_type, file_path)
-        loaded = ArchitectureLoaded(reader, ignore_topics)
+        loaded = ArchitectureLoaded(reader,
+                                    ignore_topics,
+                                    max_construction_order=max_construction_order)
 
         self._nodes: list[NodeStruct] = loaded.nodes
         self._communications: list[CommunicationStruct] = loaded.communications
