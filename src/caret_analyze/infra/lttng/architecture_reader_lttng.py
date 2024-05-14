@@ -36,6 +36,7 @@ from ...value_objects import (
     VariablePassingValue,
 )
 
+from ...architecture.dbg import D
 
 class ArchitectureReaderLttng(ArchitectureReader):
     def __init__(
@@ -134,6 +135,8 @@ class ArchitectureReaderLttng(ArchitectureReader):
                 callback_id=sub_cb.callback_id,
                 construction_order=construction_order
             ))
+            if "/planning/scenario_planning/lane_driving/motion_planning/obstacle_cruise_planner" in sub_cb.node_id:
+                D(sub_cb.callback_id)
         return info
 
     def get_services(

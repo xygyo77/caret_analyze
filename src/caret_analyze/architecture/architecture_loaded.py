@@ -50,6 +50,8 @@ from ..value_objects import (CallbackGroupValue,
                              TimerValue, VariablePassingValue,
                              )
 
+from .dbg import D, location
+
 logger = getLogger(__name__)
 
 
@@ -1231,6 +1233,9 @@ class CallbacksLoaded():
             self._cb_dict[callback.callback_id] = self._to_struct(
                 callback, callback_num, srv_callback_num)
 
+        if "obstacle_cruise_planner" in self.node_name:
+            D(self._cb_dict, 4)
+
     @property
     def node_name(self) -> str:
         return self._node.node_name
@@ -1344,6 +1349,7 @@ class CallbacksLoaded():
         msg = 'Failed to find callback. '
         msg += f'node_name: {self._node.node_name}, '
         msg += f'callback_id: {callback_id}, '
+        D(callback_id, d=8)
         raise ItemNotFoundError(msg)
 
     def search_callbacks(

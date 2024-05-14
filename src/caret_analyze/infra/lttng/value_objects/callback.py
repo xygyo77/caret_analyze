@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from ....value_objects import ServiceCallbackValue, SubscriptionCallbackValue, TimerCallbackValue
 
+from ....architecture.dbg import D
 
 class TimerCallbackValueLttng(TimerCallbackValue):
     def __init__(
@@ -75,11 +76,14 @@ class SubscriptionCallbackValueLttng(SubscriptionCallbackValue):
             publish_topic_names=publish_topic_names,
             construction_order=construction_order
         )
-
         self._callback_object = callback_object
         self._callback_object_intra = callback_object_intra
         self._tilde_sub = tilde_subscription
         self._subscription_handle = subscription_handle
+
+        if "/planning/scenario_planning/lane_driving/motion_planning/obstacle_cruise_planner" in node_id:
+            D(node_id, 3)
+            D(callback_id)
 
     @property
     def callback_object(self) -> int:

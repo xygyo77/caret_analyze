@@ -37,6 +37,7 @@ from ...common import Util
 from ...exceptions import InvalidArgumentError
 from ...value_objects import ExecutorValue, NodeValue, Qos, TimerValue
 
+from ...architecture.dbg import D
 
 logger = getLogger(__name__)
 
@@ -252,6 +253,10 @@ class LttngInfo:
                     construction_order=row['construction_order']
                 )
             )
+        for _, row in sub.df.iterrows():
+            node_id = row['node_id']
+            if "/planning/scenario_planning/lane_driving/motion_planning/obstacle_cruise_planner" in node_id:
+                D(sub_cbs_info[node_id])
         return sub_cbs_info
 
     @lru_cache
@@ -264,6 +269,8 @@ class LttngInfo:
 
         sub_cbs_info: list[SubscriptionCallbackValueLttng]
         sub_cbs_info = self._get_sub_cbs_without_pub(node_id)
+        if "/planning/scenario_planning/lane_driving/motion_planning/obstacle_cruise_planner" in node_id:
+            D(sub_cbs_info)
         return sub_cbs_info
 
     def get_subscription_callbacks(
