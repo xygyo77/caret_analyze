@@ -123,6 +123,12 @@ class RecordsMerged:
     ) -> RecordsInterface:
         logger.info('Started merging path records.')
 
+        def is_rmw_take_column(column):
+            last_slash_index = column.rfind('/')
+            if last_slash_index >= 0:
+                column = column[:last_slash_index]
+            return column.endswith('rmw_take_timestamp')
+
         def is_source_timestamp_column(column: str) -> bool:
             last_slash_index = column.rfind('/')
             if last_slash_index >= 0:
@@ -163,8 +169,6 @@ class RecordsMerged:
                 right_records)
             right_records.rename_columns(rename_rule)
 
-            if is_source_timestamp_column(right_records.columns[0]):
-                left_records.drop_columns([left_records.columns[-1]])
             if left_records.columns[-1] != right_records.columns[0]:
                 raise InvalidRecordsError('left columns[-1] != right columns[0]')
 
@@ -209,12 +213,22 @@ class RecordsMerged:
                     how='left'
                 )
 
-        if include_last_callback and isinstance(targets[-1], NodePath):
+        if (
+            include_last_callback
+            and isinstance(targets[-1], NodePath)
+            and not is_rmw_take_column(left_records.columns[-1])
+        ):
             right_records = targets[-1].to_path_end_records()
 
             rename_rule = column_merger.append_columns_and_return_rename_rule(right_records)
             right_records.rename_columns(rename_rule)
             if left_records.columns[-1] != right_records.columns[0]:
+                print(f"!!! _merge_recods() left_records.columns[-1] != right_records.columns[0]")
+                print(f"!!! {left_records.columns[-1]=}")
+                print(f"!!! {right_records.columns[0]=}")
+                print(f"!!! PASSED InvalidRecordsError ignore!!!")
+                print(f"!!! {left_records.get_column_series(left_records.columns[-1])=}")
+                print(f"!!! {right_records.get_column_series(right_records.columns[0])=}")
                 raise InvalidRecordsError('left columns[-1] != right columns[0]')
             if len(right_records.data) != 0:
                 left_records = merge(
@@ -236,7 +250,11 @@ class RecordsMerged:
         logger.info('Finished merging path records.')
         left_records.sort(first_column)
 
-        # search drop columns, which contain 'source_timestamp'
+        rmw_take_column = \
+            [column for column in left_records.columns if is_rmw_take_column(column)]
+        # if show rmw_take_timestamp in messageflow, comment out following line.
+        left_records.drop_columns(rmw_take_column)
+
         source_columns = \
             [column for column in left_records.columns if is_source_timestamp_column(column)]
         left_records.drop_columns(source_columns)
