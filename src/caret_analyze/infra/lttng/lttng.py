@@ -858,7 +858,7 @@ class Lttng(InfraBase):
             current_length = 1
             revert = False
             for i in range(1, len(sim_times)):
-                if sim_times[i] > sim_times[i-1]:
+                if sim_times[i] >= sim_times[i-1]:
                     current_length += 1
                 else:
                     revert = True
@@ -867,8 +867,12 @@ class Lttng(InfraBase):
                         start_index = i - max_length
                         end_index = i
                     current_length = 1
+            if current_length > max_length:
+                max_length = current_length
+                start_index = len(sim_times) - max_length
+                end_index = len(sim_times)
             if revert: 
-                logger.warning('A sim_time reversal has occurred.')
+                logger.warning(f'A sim_time reversal has occurred. length={max_length}')
             return system_times[start_index:end_index], sim_times[start_index:end_index]
 
         records: RecordsInterface = self._source.system_and_sim_times
