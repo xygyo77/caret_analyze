@@ -880,14 +880,13 @@ class Lttng(InfraBase):
         sim_times = records.get_column_series('sim_time')
         system_times_filtered: list[int] = []
         sim_times_filtered: list[int] = []
-        system_times_filtered, sim_times_filtered = extract_longest_monotonic_sequence(system_times, sim_times)
-        """
         for system_time, sim_time in zip(system_times, sim_times):
             if system_time is not None and sim_time is not None:
                 if min_ns <= system_time <= max_ns:
                     system_times_filtered.append(system_time)
                     sim_times_filtered.append(sim_time)
-        """
+
+        system_times_filtered, sim_times_filtered = extract_longest_monotonic_sequence(system_times_filtered, sim_times_filtered)
 
         if (len(system_times_filtered) < 2):
             logger.warning(
