@@ -94,6 +94,21 @@ class Ros2DataModel():
         self._lifecycle_transitions = TracePointIntermediateData(
             ['state_machine_handle', 'start_label', 'goal_label', 'timestamp'])
 
+        self._add_cpu_info = TracePointIntermediateData(
+            ['tp_name',
+             'timestamp',
+             'pid',
+             'tid',
+             'obj_id',
+             'option',
+             'real_sec',
+             'real_nsec',
+             'cpu_sec',
+             'cpu_nsec',
+             'vctsw',
+             'nvctsw']
+        )
+
         # Events (multiple instances, may not have a meaningful index)
         self.callback_start_instances = RecordsFactory.create_instance(
             None,
@@ -260,6 +275,23 @@ class Ros2DataModel():
             None,
             columns=[
                 ColumnValue('time_event_stamp'),
+            ]
+        )
+        self.add_cpu_info_instances = RecordsFactory.create_instance(
+            None,
+            columns=[
+                ColumnValue('tp_name'),
+                ColumnValue('timestamp'),
+                ColumnValue('pid'),
+                ColumnValue('tid'),
+                ColumnValue('obj_id'),
+                ColumnValue('option'),
+                ColumnValue('real_sec'),
+                ColumnValue('real_nsec'),
+                ColumnValue('cpu_sec'),
+                ColumnValue('cpu_nsec'),
+                ColumnValue('vctsw'),
+                ColumnValue('nvctsw'),
             ]
         )
 
@@ -831,6 +863,37 @@ class Ros2DataModel():
             'distribution': distribution,
         }
         self._caret_init.append(record)
+
+    def add_cpu_info(
+        self,
+        tp_name: str,
+        timestamp: int,
+        pid: int,
+        tid: int,
+        obj_id: int,
+        option: int,
+        real_sec: int,
+        real_nsec: int,
+        cpu_sec: int,
+        cpu_nsec: int,
+        vctsw: int,
+        nvctsw: int
+    ) -> None:
+        record = {
+            'tp_name': tp_name,
+            'timestamp': timestamp,
+            'pid': pid,
+            'tid': tid,
+            'obj_id': obj_id,
+            'option': option,
+            'real_sec': real_sec,
+            'real_nsec': real_nsec,
+            'cpu_sec': cpu_sec,
+            'cpu_nsec': cpu_nsec,
+            'vctsw': vctsw,
+            'nvctsw': nvctsw,
+        }
+        self._add_cpu_info.append(record)
 
     def finalize(self) -> None:
         self.contexts = self._contexts.get_finalized('context_handle')

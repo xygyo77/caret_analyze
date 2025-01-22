@@ -136,6 +136,7 @@ class Ros2Handler():
             'ros2:rclcpp_buffer_to_ipb',
             'ros2:rclcpp_ipb_to_subscription',
             'ros2:rclcpp_construct_ring_buffer',
+            'ros2_caret:add_cpu_info'
         ]
 
         if include_wrapped_tracepoints:
@@ -324,6 +325,9 @@ class Ros2Handler():
         #  The iron trace points for measurements defined by ros2_tracing
         handler_map['ros2:rclcpp_ring_buffer_enqueue'] = self._handle_rclcpp_ring_buffer_enqueue
         handler_map['ros2:rclcpp_ring_buffer_dequeue'] = self._handle_rclcpp_ring_buffer_dequeue
+
+        #  Trace points for measurements defined by caret_trace
+        handler_map['ros2_caret:add_cpu_info'] = self._handle_add_cpu_info
 
         self.handler_map = handler_map
 
@@ -1102,3 +1106,34 @@ class Ros2Handler():
         timestamp = get_field(event, '_timestamp')
         sim_time = get_field(event, 'stamp')
         self.data.add_sim_time(timestamp, sim_time)
+
+    def _handle_add_cpu_info(
+        self,
+        event: dict,
+    ) -> None:
+        tp_name = get_field(event, 'tp_name')
+        timestamp = get_field(event, '_timestamp')
+        pid = get_field(event, '_vpid')
+        tid = get_field(event, '_vtid')
+        obj_id = get_field(event, 'obj_id')
+        option = get_field(event, 'option')
+        real_sec = get_field(event, 'real_sec')
+        real_nsec = get_field(event, 'real_nsec')
+        cpu_sec = get_field(event, 'cpu_sec')
+        cpu_nsec = get_field(event, 'cpu_nsec')
+        vctsw = get_field(event, 'vctsw')
+        nvctsw = get_field(event, 'nvctsw')
+        self.data.add_cpu_info(
+            tp_name,
+            timestamp,
+            pid,
+            tid,
+            obj_id,
+            option,
+            real_sec,
+            real_nsec,
+            cpu_sec,
+            cpu_nsec,
+            vctsw,
+            nvctsw)
+        
