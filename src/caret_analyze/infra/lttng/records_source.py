@@ -663,7 +663,7 @@ class RecordsSource():
         records: RecordsInterface
         records = merge_sequential(
             left_records=self._data.callback_start_instances,
-            right_records=self._data.callback_end_ex_instances,
+            right_records=self._data.callback_end_instances,
             left_stamp_key=COLUMN_NAME.CALLBACK_START_TIMESTAMP,
             right_stamp_key=COLUMN_NAME.CALLBACK_END_TIMESTAMP,
             join_left_key=COLUMN_NAME.CALLBACK_OBJECT,

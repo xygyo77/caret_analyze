@@ -196,7 +196,7 @@ class EventCounter:
             'ros2_caret:rmw_implementation': data.rmw_impl.df,
 
             'ros2:callback_start': data.callback_start_instances.to_dataframe(),
-            'ros2_caret:callback_end_ex': data.callback_end_ex_instances.to_dataframe(),
+            ### 'ros2_caret:callback_end': data.callback_end_instances.to_dataframe(),
             'ros2:rclcpp_publish': data.rclcpp_publish_instances.to_dataframe(),
             'ros2:rclcpp_intra_publish': data.rclcpp_intra_publish_instances.to_dataframe(),
             'ros2:rclcpp_ring_buffer_enqueue':
@@ -220,7 +220,7 @@ class EventCounter:
             'ros2_caret:on_data_available': data.on_data_available_instances.to_dataframe(),
             'ros2_caret:caret_init': data.caret_init.df,
 
-            'ros2_caret:callback_end_ex': data.callback_end_ex.to_dataframe(),
+            'ros2_caret:callback_end_ex': data.callback_end_instances.to_dataframe(),
         }
         #  'ros2_caret:rmw_implementation': ,
 

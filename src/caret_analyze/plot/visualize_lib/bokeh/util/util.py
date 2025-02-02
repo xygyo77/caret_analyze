@@ -34,7 +34,7 @@ class RectValues:
         y_max: float
     ) -> None:
         self._y = [y_min, y_max]
-        self._x = [callback_start, callback_end_ex]
+        self._x = [callback_start, callback_end]
 
     @property
     def x(self) -> float:

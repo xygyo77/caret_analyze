@@ -95,18 +95,33 @@ class Ros2DataModel():
             ['state_machine_handle', 'start_label', 'goal_label', 'timestamp'])
 
         self._callback_end_ex = TracePointIntermediateData(
-            ['tp_name',
-             'timestamp',
-             'pid',
-             'tid',
-             'obj_id',
-             'option',
-             'real_sec',
-             'real_nsec',
-             'cpu_sec',
-             'cpu_nsec',
-             'vctsw',
-             'nvctsw']
+            ['timestamp',
+            'pid',
+            'tid',
+            'callback',
+            'is_extended_data',
+            'get_next_real_sec',
+            'get_next_real_nsec',
+            'get_next_cpu_sec',
+            'get_next_cpu_nsec',
+            'get_next_vctsw',
+            'get_next_nvctsw',
+            'get_next_count',
+            'cb_start_callback',
+            'cb_start_is_intra_process',
+            'cb_start_real_sec',
+            'cb_start_real_nsec',
+            'cb_start_cpu_sec',
+            'cb_start_cpu_nsec',
+            'cb_start_vctsw',
+            'cb_start_nvctsw',
+            'cb_start_count',
+            'cb_end_real_sec',
+            'cb_end_real_nsec',
+            'cb_end_cpu_sec',
+            'cb_end_cpu_nsec',
+            'cb_end_vctsw',
+            'cb_end_nvctsw']
         )
 
         # Events (multiple instances, may not have a meaningful index)
@@ -119,14 +134,16 @@ class Ros2DataModel():
                 ColumnValue('is_intra_process'),
             ]
         )
-        self.callback_end_ex_instances = RecordsFactory.create_instance(
+        """
+        self.callback_end_instances = RecordsFactory.create_instance(
             None,
             columns=[
                 ColumnValue('tid'),
-                ColumnValue('callback_end_ex_timestamp'),
+                ColumnValue('callback_end_timestamp'),
                 ColumnValue('callback_object'),
             ]
-        )
+        )callback_end_timestamp
+        """
         self.dds_write_instances = RecordsFactory.create_instance(
             None,
             columns=[
@@ -280,18 +297,34 @@ class Ros2DataModel():
         self.callback_end_ex = RecordsFactory.create_instance(
             None,
             columns=[
-                ColumnValue('tp_name'),
-                ColumnValue('timestamp'),
-                ColumnValue('pid'),
                 ColumnValue('tid'),
-                ColumnValue('obj_id'),
-                ColumnValue('option'),
-                ColumnValue('real_sec'),
-                ColumnValue('real_nsec'),
-                ColumnValue('cpu_sec'),
-                ColumnValue('cpu_nsec'),
-                ColumnValue('vctsw'),
-                ColumnValue('nvctsw'),
+                ColumnValue('callback_end_timestamp'),
+                ColumnValue('callback_object'),
+                ColumnValue('is_extended_data'),
+                ColumnValue('pid'),
+                ColumnValue('get_next_real_sec'),
+                ColumnValue('get_next_real_nsec'),
+                ColumnValue('get_next_cpu_sec'),
+                ColumnValue('get_next_cpu_nsec'),
+                ColumnValue('get_next_vctsw'),
+                ColumnValue('get_next_nvctsw'),
+                ColumnValue('get_next_count'),
+                ColumnValue('cb_start_callback'),
+                ColumnValue('cb_start_is_intra_process'),
+                ColumnValue('cb_start_real_sec'),
+                ColumnValue('cb_start_real_nsec'),
+                ColumnValue('cb_start_cpu_sec'),
+                ColumnValue('cb_start_cpu_nsec'),
+                ColumnValue('cb_start_vctsw'),
+                ColumnValue('cb_start_nvctsw'),
+                ColumnValue('cb_start_count'),
+                ColumnValue('cb_end_real_sec'),
+                ColumnValue('cb_end_real_nsec'),
+                ColumnValue('cb_end_cpu_sec'),
+                ColumnValue('cb_end_cpu_nsec'),
+                ColumnValue('cb_end_vctsw'),
+                ColumnValue('cb_end_nvctsw'),
+                ColumnValue('cb_end_count'),
             ]
         )
 
@@ -466,10 +499,10 @@ class Ros2DataModel():
     def add_callback_end_ex_instance(self, tid: int, timestamp: int, callback: int) -> None:
         record = {
             'tid': tid,
-            'callback_end_ex_timestamp': timestamp,
+            'callback_end_timestamp': timestamp,
             'callback_object': callback
         }
-        self.callback_end_ex_instances.append(record)
+        self.callback_end_instances.append(record)
 
     def add_rclcpp_intra_publish_instance(
         self,

@@ -1183,9 +1183,9 @@ class NodeRecordsCallbackChain:
         last_element = chain_info[-1]
         if isinstance(last_element, CallbackStructValue) \
                 and self._val.publisher is not None:
-            last_callback_end_ex_name = Util.filter_items(
+            last_callback_end_name = Util.filter_items(
                 lambda x: COLUMN_NAME.CALLBACK_END_TIMESTAMP in x, records.columns)[-1]
-            records.drop_columns([last_callback_end_ex_name])
+            records.drop_columns([last_callback_end_name])
             last_callback_start_name = Util.filter_items(
                 lambda x: COLUMN_NAME.CALLBACK_START_TIMESTAMP in x, records.columns)[-1]
 
