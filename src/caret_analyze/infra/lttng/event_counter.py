@@ -75,7 +75,7 @@ class EventCounter:
             'ros2_caret:sim_time',
             'ros2_caret:on_data_available_data',
             'ros2_caret:rmw_implementation',
-            'ros2_caret:add_cpu_info'
+            'ros2_caret:callback_end_ex'
         }
 
         dds_trace_points_added_by_ld_preload = {
@@ -196,7 +196,7 @@ class EventCounter:
             'ros2_caret:rmw_implementation': data.rmw_impl.df,
 
             'ros2:callback_start': data.callback_start_instances.to_dataframe(),
-            'ros2:callback_end': data.callback_end_instances.to_dataframe(),
+            'ros2_caret:callback_end_ex': data.callback_end_ex_instances.to_dataframe(),
             'ros2:rclcpp_publish': data.rclcpp_publish_instances.to_dataframe(),
             'ros2:rclcpp_intra_publish': data.rclcpp_intra_publish_instances.to_dataframe(),
             'ros2:rclcpp_ring_buffer_enqueue':
@@ -220,7 +220,7 @@ class EventCounter:
             'ros2_caret:on_data_available': data.on_data_available_instances.to_dataframe(),
             'ros2_caret:caret_init': data.caret_init.df,
 
-            'ros2_caret:add_cpu_info': data.add_cpu_info_instances.to_dataframe(),
+            'ros2_caret:callback_end_ex': data.callback_end_ex.to_dataframe(),
         }
         #  'ros2_caret:rmw_implementation': ,
 

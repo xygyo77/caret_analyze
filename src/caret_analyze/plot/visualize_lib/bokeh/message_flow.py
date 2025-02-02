@@ -186,12 +186,12 @@ class MessageFlowRectSource:
                 df = callback.to_dataframe(shaper=clip)
                 for _, row in df.iterrows():
                     callback_start = row.to_list()[0]
-                    callback_end = row.to_list()[-1]
+                    callback_end_ex = row.to_list()[-1]
                     if converter:
                         callback_start = converter.convert(callback_start)
-                        callback_end = converter.convert(callback_end)
+                        callback_end_ex = converter.convert(callback_end_ex)
                     rect = RectValues((callback_start - offset.value) * 10**-9,
-                                      (callback_end - offset.value) * 10**-9,
+                                      (callback_end_ex - offset.value) * 10**-9,
                                       y_min, y_max)
                     rect_source.stream({
                         **{'x': [rect.x],
@@ -201,9 +201,9 @@ class MessageFlowRectSource:
                         **self._hover_source.generate(callback, {
                             't_start':
                             f't_start = {to_format_str(callback_start - offset.value)} [s]',
-                            't_end': f't_end = {to_format_str(callback_end - offset.value)} [s]',
+                            't_end': f't_end = {to_format_str(callback_end_ex - offset.value)} [s]',
                             't_offset': f't_offset = {offset}',
-                            'latency': f'latency = {(callback_end-callback_start)*1.0e-6} [ms]',
+                            'latency': f'latency = {(callback_end_ex-callback_start)*1.0e-6} [ms]',
                             'callback_param': get_callback_param_desc(callback)
                         })  # type: ignore
                     })
@@ -341,7 +341,7 @@ class YAxisValues:
     def _search_values(self, search_name) -> np.ndarray:
         indexes = np.array([], dtype=int)
         for i, column_name in enumerate(self._column_names):
-            if 'callback_end' in column_name:
+            if 'callback_end_ex' in column_name:
                 continue
             if search_name in column_name:
                 indexes = np.append(indexes, i)
@@ -420,7 +420,7 @@ class NodeLevelFormatter(DataFrameFormatter):
                     parsed_before.node_name == parsed.node_name and \
                     'rclcpp_publish' not in parsed.tracepoint_name and \
                     not ('callback_start' in parsed_before.tracepoint_name and
-                         'callback_end' in parsed.tracepoint_name):
+                         'callback_end_ex' in parsed.tracepoint_name):
                 drop_columns.append(column_name)
 
             if parsed_before.topic_name is not None and parsed.topic_name is not None and \

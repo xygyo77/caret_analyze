@@ -94,7 +94,7 @@ class Ros2DataModel():
         self._lifecycle_transitions = TracePointIntermediateData(
             ['state_machine_handle', 'start_label', 'goal_label', 'timestamp'])
 
-        self._add_cpu_info = TracePointIntermediateData(
+        self._callback_end_ex = TracePointIntermediateData(
             ['tp_name',
              'timestamp',
              'pid',
@@ -119,11 +119,11 @@ class Ros2DataModel():
                 ColumnValue('is_intra_process'),
             ]
         )
-        self.callback_end_instances = RecordsFactory.create_instance(
+        self.callback_end_ex_instances = RecordsFactory.create_instance(
             None,
             columns=[
                 ColumnValue('tid'),
-                ColumnValue('callback_end_timestamp'),
+                ColumnValue('callback_end_ex_timestamp'),
                 ColumnValue('callback_object'),
             ]
         )
@@ -277,7 +277,7 @@ class Ros2DataModel():
                 ColumnValue('time_event_stamp'),
             ]
         )
-        self.add_cpu_info_instances = RecordsFactory.create_instance(
+        self.callback_end_ex = RecordsFactory.create_instance(
             None,
             columns=[
                 ColumnValue('tp_name'),
@@ -463,13 +463,13 @@ class Ros2DataModel():
             }
         self.callback_start_instances.append(record)
 
-    def add_callback_end_instance(self, tid: int, timestamp: int, callback: int) -> None:
+    def add_callback_end_ex_instance(self, tid: int, timestamp: int, callback: int) -> None:
         record = {
             'tid': tid,
-            'callback_end_timestamp': timestamp,
+            'callback_end_ex_timestamp': timestamp,
             'callback_object': callback
         }
-        self.callback_end_instances.append(record)
+        self.callback_end_ex_instances.append(record)
 
     def add_rclcpp_intra_publish_instance(
         self,
@@ -864,36 +864,76 @@ class Ros2DataModel():
         }
         self._caret_init.append(record)
 
-    def add_cpu_info(
+    def callback_end_ex(
         self,
-        tp_name: str,
         timestamp: int,
         pid: int,
         tid: int,
-        obj_id: int,
-        option: int,
-        real_sec: int,
-        real_nsec: int,
-        cpu_sec: int,
-        cpu_nsec: int,
-        vctsw: int,
-        nvctsw: int
+        callback: int,
+        is_extended_data: int,
+        # get_next_ready
+        get_next_real_sec: int,
+        get_next_real_nsec: int,
+        get_next_cpu_sec: int,
+        get_next_cpu_nsec: int,
+        get_next_vctsw: int,
+        get_next_nvctsw: int,
+        get_next_count: int,
+        # callback_start
+        cb_start_callback: int,
+        cb_start_is_intra_process: int,
+        cb_start_real_sec: int,
+        cb_start_real_nsec: int,
+        cb_start_cpu_sec: int,
+        cb_start_cpu_nsec: int,
+        cb_start_vctsw: int,
+        cb_start_nvctsw: int,
+        cb_start_count: int,
+        # callback_end
+        cb_end_callback: int,
+        cb_end_real_sec: int,
+        cb_end_real_nsec: int,
+        cb_end_cpu_sec: int,
+        cb_end_cpu_nsec: int,
+        cb_end_vctsw: int,
+        cb_end_nvctsw: int,
     ) -> None:
         record = {
-            'tp_name': tp_name,
             'timestamp': timestamp,
             'pid': pid,
             'tid': tid,
-            'obj_id': obj_id,
-            'option': option,
-            'real_sec': real_sec,
-            'real_nsec': real_nsec,
-            'cpu_sec': cpu_sec,
-            'cpu_nsec': cpu_nsec,
-            'vctsw': vctsw,
-            'nvctsw': nvctsw,
+            # callback_end
+            'callback': callback,
+            # extention
+            'is_extended_data': is_extended_data,
+            # get_next_ready
+            'get_next_real_sec': get_next_real_sec,
+            'get_next_real_nsec': get_next_real_nsec,
+            'get_next_cpu_sec': get_next_cpu_sec,
+            'get_next_cpu_nsec': get_next_cpu_nsec,
+            'get_next_vctsw': get_next_vctsw,
+            'get_next_nvctsw': get_next_nvctsw,
+            'get_next_count': get_next_count,
+            # callback_start
+            'cb_start_callback': cb_start_callback,
+            'cb_start_is_intra_process': cb_start_is_intra_process,
+            'cb_start_real_sec': cb_start_real_sec,
+            'cb_start_real_nsec': cb_start_real_nsec,
+            'cb_start_cpu_sec': cb_start_cpu_sec,
+            'cb_start_cpu_nsec': cb_start_cpu_nsec,
+            'cb_start_vctsw': cb_start_vctsw,
+            'cb_start_nvctsw': cb_start_nvctsw,
+            'cb_start_count': cb_start_count,
+            # callback_end
+            'cb_end_callback': cb_end_callback,
+            'cb_end_real_sec': cb_end_real_sec,
+            'cb_end_real_nsec': cb_end_real_nsec,
+            'cb_end_cpu_sec': cb_end_cpu_sec,
+            'cb_end_cpu_nsec': cb_end_cpu_nsec,
+            'cb_end_vctsw': cb_end_vctsw,
+            'cb_end_nvctsw': cb_end_nvctsw,
         }
-        self._add_cpu_info.append(record)
+        self._callback_end_ex.append(record)
 
     def finalize(self) -> None:
         self.contexts = self._contexts.get_finalized('context_handle')

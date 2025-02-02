@@ -101,7 +101,7 @@ class Ros2Handler():
             'ros2:rclcpp_timer_link_node',
             'ros2:rclcpp_callback_register',
             'ros2:callback_start',
-            'ros2:callback_end',
+            ### 'ros2:callback_end',
             'ros2:rcl_lifecycle_state_machine_init',
             'ros2:rcl_lifecycle_transition',
             'ros2:rclcpp_publish',
@@ -136,7 +136,7 @@ class Ros2Handler():
             'ros2:rclcpp_buffer_to_ipb',
             'ros2:rclcpp_ipb_to_subscription',
             'ros2:rclcpp_construct_ring_buffer',
-            'ros2_caret:add_cpu_info'
+            'ros2_caret:callback_end_ex'
         ]
 
         if include_wrapped_tracepoints:
@@ -292,7 +292,7 @@ class Ros2Handler():
 
         #  Trace points for measurements defined by ros2_tracing
         handler_map['ros2:callback_start'] = self._handle_callback_start
-        handler_map['ros2:callback_end'] = self._handle_callback_end
+        handler_map['ros2_caret:callback_end_ex'] = self._handle_callback_end_ex
 
         #  Trace points for measurements defined by ros2_tracing
         handler_map['ros2:rcl_lifecycle_transition'] = self._handle_rcl_lifecycle_transition
@@ -327,7 +327,7 @@ class Ros2Handler():
         handler_map['ros2:rclcpp_ring_buffer_dequeue'] = self._handle_rclcpp_ring_buffer_dequeue
 
         #  Trace points for measurements defined by caret_trace
-        handler_map['ros2_caret:add_cpu_info'] = self._handle_add_cpu_info
+        handler_map['ros2_caret:callback_end_ex'] = self._handle_callback_end_ex
 
         self.handler_map = handler_map
 
@@ -645,7 +645,7 @@ class Ros2Handler():
         self.data.add_callback_start_instance(
             tid, timestamp, callback, is_intra_process)
 
-    def _handle_callback_end(
+    def _handle_callback_end_ex(
         self,
         event: dict,
     ) -> None:
@@ -658,7 +658,7 @@ class Ros2Handler():
         timestamp = get_field(event, '_timestamp')
 
         callback = self._remapper.callback_remapper.get_latest_object_id(callback, event)
-        self.data.add_callback_end_instance(tid, timestamp, callback)
+        self.data.add_callback_end_ex_instance(tid, timestamp, callback)
 
     def _handle_rcl_lifecycle_state_machine_init(
         self,
@@ -1107,33 +1107,71 @@ class Ros2Handler():
         sim_time = get_field(event, 'stamp')
         self.data.add_sim_time(timestamp, sim_time)
 
-    def _handle_add_cpu_info(
+    def _handle_callback_end_ex(
         self,
         event: dict,
     ) -> None:
-        tp_name = get_field(event, 'tp_name')
         timestamp = get_field(event, '_timestamp')
         pid = get_field(event, '_vpid')
         tid = get_field(event, '_vtid')
-        obj_id = get_field(event, 'obj_id')
-        option = get_field(event, 'option')
-        real_sec = get_field(event, 'real_sec')
-        real_nsec = get_field(event, 'real_nsec')
-        cpu_sec = get_field(event, 'cpu_sec')
-        cpu_nsec = get_field(event, 'cpu_nsec')
-        vctsw = get_field(event, 'vctsw')
-        nvctsw = get_field(event, 'nvctsw')
-        self.data.add_cpu_info(
-            tp_name,
+        callback = get_field(event, 'callback')
+        is_extended_data = get_field(event, 'is_extended_data')
+        # get_next_ready
+        get_next_real_sec = get_field(event, 'get_next_real_sec')
+        get_next_real_nsec = get_field(event, 'get_next_real_nsec')
+        get_next_cpu_sec = get_field(event, 'get_next_cpu_sec')
+        get_next_cpu_nsec = get_field(event, 'get_next_cpu_nsec')
+        get_next_vctsw = get_field(event, 'get_next_vctsw')
+        get_next_nvctsw = get_field(event, 'get_next_nvctsw')
+        get_next_count = get_field(event, 'get_next_count')
+        # callback_start
+        cb_start_callback = get_field(event, 'cb_start_callback')
+        cb_start_is_intra_process = get_field(event, 'cb_start_is_intra_process')
+        cb_start_real_sec = get_field(event, 'cb_start_real_sec')
+        cb_start_real_nsec = get_field(event, 'cb_start_real_nsec')
+        cb_start_cpu_sec = get_field(event, 'cb_start_cpu_sec')
+        cb_start_cpu_nsec = get_field(event, 'cb_start_cpu_nsec')
+        cb_start_vctsw = get_field(event, 'cb_start_vctsw')
+        cb_start_nvctsw = get_field(event, 'cb_start_nvctsw')
+        cb_start_count = get_field(event, 'cb_start_count')
+        # callback_start
+        cb_end_callback = get_field(event, 'cb_end_callback')
+        cb_end_real_sec = get_field(event, 'cb_end_real_sec')
+        cb_end_real_nsec = get_field(event, 'cb_end_real_nsec')
+        cb_end_cpu_sec = get_field(event, 'cb_end_cpu_sec')
+        cb_end_cpu_nsec = get_field(event, 'cb_end_cpu_nsec')
+        cb_end_vctsw = get_field(event, 'cb_end_vctsw')
+        cb_end_nvctsw = get_field(event, 'cb_end_nvctsw')
+        self.data.callback_end_ex(
             timestamp,
             pid,
             tid,
-            obj_id,
-            option,
-            real_sec,
-            real_nsec,
-            cpu_sec,
-            cpu_nsec,
-            vctsw,
-            nvctsw)
+            callback,
+            is_extended_data,
+            # get_next_ready
+            get_next_real_sec,
+            get_next_real_nsec,
+            get_next_cpu_sec,
+            get_next_cpu_nsec,
+            get_next_vctsw,
+            get_next_nvctsw,
+            get_next_count,
+            # callback_start
+            cb_start_callback,
+            cb_start_is_intra_process,
+            cb_start_real_sec,
+            cb_start_real_nsec,
+            cb_start_cpu_sec,
+            cb_start_cpu_nsec,
+            cb_start_vctsw,
+            cb_start_nvctsw,
+            cb_start_count,
+            # callback_end
+            cb_end_callback,
+            cb_end_real_sec,
+            cb_end_real_nsec,
+            cb_end_cpu_sec,
+            cb_end_cpu_nsec,
+            cb_end_vctsw,
+            cb_end_nvctsw)
         

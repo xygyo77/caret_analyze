@@ -194,7 +194,7 @@ class CallbackSchedRectKeys(HoverKeysBase):
             )
 
     def to_list(self) -> list[str]:
-        return ['legend_label', 'callback_start', 'callback_end', 'latency']
+        return ['legend_label', 'callback_start', 'callback_end_ex', 'latency']
 
 
 class TimeSeriesKeys(HoverKeysBase):
