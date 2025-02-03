@@ -1111,29 +1111,62 @@ class Ros2Handler():
         self,
         event: dict,
     ) -> None:
-        tp_name = get_field(event, 'tp_name')
         timestamp = get_field(event, '_timestamp')
         pid = get_field(event, '_vpid')
         tid = get_field(event, '_vtid')
-        obj_id = get_field(event, 'obj_id')
-        option = get_field(event, 'option')
-        real_sec = get_field(event, 'real_sec')
-        real_nsec = get_field(event, 'real_nsec')
-        cpu_sec = get_field(event, 'cpu_sec')
-        cpu_nsec = get_field(event, 'cpu_nsec')
-        vctsw = get_field(event, 'vctsw')
-        nvctsw = get_field(event, 'nvctsw')
+        # get_next_ready
+        get_next_real_sec = get_field(event, 'gn_rs')
+        get_next_real_nsec = get_field(event, 'gn_rns')
+        get_next_cpu_sec = get_field(event, 'gn_cs')
+        get_next_cpu_nsec = get_field(event, 'gn_cns')
+        get_next_vctsw = get_field(event, 'gn_ctx')
+        get_next_nvctsw = get_field(event, 'gn_nctx')
+        get_next_count = get_field(event, 'gn_ct')
+        # callback_start
+        cb_start_callback = get_field(event, 'st_cb')
+        cb_start_is_intra_process = get_field(event, 'st_op')
+        cb_start_real_sec = get_field(event, 'st_rs')
+        cb_start_real_nsec = get_field(event, 'st_rns')
+        cb_start_cpu_sec = get_field(event, 'st_cs')
+        cb_start_cpu_nsec = get_field(event, 'st_cns')
+        cb_start_vctsw = get_field(event, 'st_ctx')
+        cb_start_nvctsw = get_field(event, 'st_nctx')
+        cb_start_count = get_field(event, 'st_ct')
+        # callback_end
+        cb_end_callback = get_field(event, 'ed_cb')
+        cb_end_real_sec = get_field(event, 'ed_rs')
+        cb_end_real_nsec = get_field(event, 'ed_rns')
+        cb_end_cpu_sec = get_field(event, 'ed_cs')
+        cb_end_cpu_nsec = get_field(event, 'ed_cns')
+        cb_end_vctsw = get_field(event, 'ed_ctx')
+        cb_end_nvctsw = get_field(event, 'ed_nctx')
         self.data.add_cpu_info(
-            tp_name,
             timestamp,
             pid,
             tid,
-            obj_id,
-            option,
-            real_sec,
-            real_nsec,
-            cpu_sec,
-            cpu_nsec,
-            vctsw,
-            nvctsw)
+            # get_next_ready
+            get_next_real_sec,
+            get_next_real_nsec,
+            get_next_cpu_sec,
+            get_next_cpu_nsec,
+            get_next_vctsw,
+            get_next_nvctsw,
+            # callback_start
+            cb_start_callback,
+            cb_start_is_intra_process,
+            cb_start_real_sec,
+            cb_start_real_nsec,
+            cb_start_cpu_sec,
+            cb_start_cpu_nsec,
+            cb_start_vctsw,
+            cb_start_nvctsw,
+            cb_start_count,
+            # callback_end
+            cb_end_callback,
+            cb_end_real_sec,
+            cb_end_real_nsec,
+            cb_end_cpu_sec,
+            cb_end_cpu_nsec,
+            cb_end_vctsw,
+            cb_end_nvctsw)
         

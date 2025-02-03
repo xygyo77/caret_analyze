@@ -95,18 +95,35 @@ class Ros2DataModel():
             ['state_machine_handle', 'start_label', 'goal_label', 'timestamp'])
 
         self._add_cpu_info = TracePointIntermediateData(
-            ['tp_name',
-             'timestamp',
+            ['timestamp',
              'pid',
              'tid',
-             'obj_id',
-             'option',
-             'real_sec',
-             'real_nsec',
-             'cpu_sec',
-             'cpu_nsec',
-             'vctsw',
-             'nvctsw']
+             # get_next_ready
+             'gn_rs',    # real time sec/nsec
+             'gn_rns',
+             'gn_cs',    # cpu time sec/nsec
+             'gn_cns',
+             'gn_ctx',   # context switch voluntary/non-voluntary
+             'gn_nctx',
+             'gn_ct',    # get_next_ready occurrence count
+             # callback_start
+             'st_cb',    # callback object
+             'st_op',    # is_intra_pprocess
+             'st_rs',    # real time sec/nsec
+             'st_rns',
+             'st_cs',    # cpu time sec/nsec
+             'st_cns',
+             'st_ctx',   # context switch voluntary/non-voluntary
+             'st_nctx',
+             'st_ct',    # callback_start occurrence count (always "1")
+             # callback_end
+             'ed_cb',    # callback object
+             'ed_rs',    # real time sec/nsec
+             'ed_rns',
+             'ed_cs',    # cpu time sec/nsec
+             'ed_cns',
+             'ed_ctx',   # context switch voluntary/non-voluntary
+             'ed_nctx']
         )
 
         # Events (multiple instances, may not have a meaningful index)
