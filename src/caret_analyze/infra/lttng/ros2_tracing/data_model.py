@@ -134,7 +134,6 @@ class Ros2DataModel():
                 ColumnValue('is_intra_process'),
             ]
         )
-        """
         self.callback_end_instances = RecordsFactory.create_instance(
             None,
             columns=[
@@ -142,8 +141,7 @@ class Ros2DataModel():
                 ColumnValue('callback_end_timestamp'),
                 ColumnValue('callback_object'),
             ]
-        )callback_end_timestamp
-        """
+        )
         self.dds_write_instances = RecordsFactory.create_instance(
             None,
             columns=[
