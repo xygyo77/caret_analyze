@@ -114,6 +114,7 @@ class Ros2DataModel():
             'cb_start_vctsw',
             'cb_start_nvctsw',
             'cb_start_count',
+            'cb_end_callback',
             'cb_end_real_sec',
             'cb_end_real_nsec',
             'cb_end_cpu_sec',
