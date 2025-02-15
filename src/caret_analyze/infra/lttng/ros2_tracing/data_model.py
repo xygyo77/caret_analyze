@@ -120,7 +120,6 @@ class Ros2DataModel():
             'cb_start_cpu_nsec',
             'cb_start_vctsw',
             'cb_start_nvctsw',
-            'cb_start_count',
             'cb_end_callback',
             'cb_end_real_sec',
             'cb_end_real_nsec',
@@ -319,7 +318,6 @@ class Ros2DataModel():
                 ColumnValue('cb_start_cpu_nsec'),
                 ColumnValue('cb_start_vctsw'),
                 ColumnValue('cb_start_nvctsw'),
-                ColumnValue('cb_start_count'),
                 ColumnValue('cb_end_real_sec'),
                 ColumnValue('cb_end_real_nsec'),
                 ColumnValue('cb_end_cpu_sec'),
@@ -949,7 +947,6 @@ class Ros2DataModel():
         cb_start_cpu_nsec: int,
         cb_start_vctsw: int,
         cb_start_nvctsw: int,
-        cb_start_count: int,
         # callback_end
         cb_end_callback: int,
         cb_end_real_sec: int,
@@ -980,7 +977,6 @@ class Ros2DataModel():
             'cb_start_cpu_nsec': cb_start_cpu_nsec,
             'cb_start_vctsw': cb_start_vctsw,
             'cb_start_nvctsw': cb_start_nvctsw,
-            'cb_start_count': cb_start_count,
             # callback_end
             'cb_end_callback': cb_end_callback,
             'cb_end_real_sec': cb_end_real_sec,

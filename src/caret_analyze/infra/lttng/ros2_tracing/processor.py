@@ -1131,7 +1131,6 @@ class Ros2Handler():
         cb_start_cpu_nsec = get_field(event, 'st_cns')
         cb_start_vctsw = get_field(event, 'st_ctx')
         cb_start_nvctsw = get_field(event, 'st_nctx')
-        cb_start_count = get_field(event, 'st_ct')
         # callback_end
         cb_end_callback = get_field(event, 'ed_cb')
         cb_end_real_sec = get_field(event, 'ed_rs')
@@ -1161,7 +1160,6 @@ class Ros2Handler():
             cb_start_cpu_nsec,
             cb_start_vctsw,
             cb_start_nvctsw,
-            cb_start_count,
             # callback_end
             cb_end_callback,
             cb_end_real_sec,
