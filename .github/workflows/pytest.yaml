@@ -7,6 +7,7 @@ on:
       - accelerate_graph_search_and_getmembers
   pull_request:
   workflow_dispatch:
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
