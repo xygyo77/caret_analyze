@@ -1,6 +1,11 @@
 name: pytest
 
+  pull_request:
 on:
+  push:
+    branches:
+      - feat_accelerate_search
+      - accelerate_graph_search_and_getmembers
   pull_request:
 
 jobs:
