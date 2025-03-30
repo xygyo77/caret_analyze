@@ -414,6 +414,7 @@ class Lttng(InfraBase):
         # For Agnocast
         'ros2:agnocast_subscription_init',
         'ros2:agnocast_publisher_init',
+        'ros2:agnocast_construct_executor',
     ]
 
     def __init__(
