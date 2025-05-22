@@ -39,6 +39,15 @@ class BokehStackedBar:
         self._case = case
 
     def create_figure(self) -> Figure:
+        """
+        Create Bokeh stacked bar figure.
+
+        Returns
+        -------
+        bokeh.plotting.Figure
+            Figure of Bokeh stacked bar.
+
+        """
         # NOTE: relation between stacked bar graph and data struct
         # # data = {
         # #     a : [a1, a2, a3],
@@ -68,8 +77,12 @@ class BokehStackedBar:
         title: str = f'Stacked bar of response_time of {path_name} --- {self._case} case ---'
 
         fig = init_figure(title, self._ywheel_zoom, self._xaxis_type, y_axis_label)
-        frame_min = data['start time'][0]
-        frame_max = data['start time'][-1]
+        if len(data['start time']) == 0:
+            frame_min: float = 0
+            frame_max: float = 0
+        else:
+            frame_min = data['start time'][0]
+            frame_max = data['start time'][-1]
         x_label = 'start time'
         if self._xaxis_type == 'system_time' or self._xaxis_type == 'sim_time':
             apply_x_axis_offset(fig, frame_min, frame_max)
@@ -122,19 +135,20 @@ class StackedBarSource:
         for prev_, next_ in zip(reversed(y_labels[:-1]), reversed(y_labels[1:])):
             data[prev_] = [data[prev_][i] + data[next_][i] for i in range(len(data[next_]))]
 
-        if xaxis_type == 'system_time' or xaxis_type == 'sim_time':
-            # Update the timestamps from absolutely time to offset time
-            data[x_label] = self._updated_timestamps_to_offset_time(
-                data[x_label])
+        if len(data['start time']) != 0:
+            if xaxis_type == 'system_time' or xaxis_type == 'sim_time':
+                # Update the timestamps from absolutely time to offset time
+                data[x_label] = self._updated_timestamps_to_offset_time(
+                    data[x_label])
 
-            x_width_list = self._get_x_width_list(data[x_label])
-            half_width_list = [x / 2 for x in x_width_list]
+                x_width_list = self._get_x_width_list(data[x_label])
+                half_width_list = [x / 2 for x in x_width_list]
 
-            # Slide x axis values so that the bottom left of bars are the start time.
-            data[x_label] = self._add_shift_value(data[x_label], half_width_list)
-        else:  # index
-            data[x_label] = list(range(0, len(data[y_labels[0]])))
-            x_width_list = self._get_x_width_list(data[x_label])
+                # Slide x axis values so that the bottom left of bars are the start time.
+                data[x_label] = self._add_shift_value(data[x_label], half_width_list)
+            else:  # index
+                data[x_label] = list(range(0, len(data[y_labels[0]])))
+                x_width_list = self._get_x_width_list(data[x_label])
 
         self._data: dict[str, list[int | float]] = data
         self._x_width_list: list[float] = x_width_list
@@ -214,12 +228,30 @@ class StackedBarSource:
         return new_values
 
     def add_label_data_to_stacked_bar(self, stacked_bar: list[GraphRenderer]):
+        """
+        Add 'label' data to each bar due to display hover.
+
+        Parameters
+        ----------
+        stacked_bar : list[GraphRenderer]
+            Stacked bar lists.
+
+        """
         # add 'label' data to each bar due to display hover
         x_len = min([len(v) for v in self._data.values()])
         for bar in stacked_bar:
             bar.data_source.add([bar.name] * x_len, 'label')
 
     def add_latency_data_to_stacked_bar(self, stacked_bar: list[GraphRenderer]):
+        """
+        Add 'latency' data to each bar due to display hover.
+
+        Parameters
+        ----------
+        stacked_bar : list[GraphRenderer]
+            Stacked bar lists.
+
+        """
         # add 'latency' data to each bar due to display hover
         for bar in stacked_bar:
             bar.data_source.add(['latency = ' + str(latency)
@@ -228,6 +260,15 @@ class StackedBarSource:
     def to_source(
         self,
     ) -> dict[str, list[int | float]]:
+        """
+        Get stacked bar source.
+
+        Returns
+        -------
+        dict[str, list[int | float]]
+            Stacked bar source.
+
+        """
         # NOTE: Using `ColumnDataSource`, it is not possible
         # NOTE: to display a different hover for each stack (cause unknown).
         # convert timestamp to latency

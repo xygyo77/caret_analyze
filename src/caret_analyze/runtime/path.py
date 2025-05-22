@@ -43,6 +43,22 @@ class ColumnMerger():
         records: RecordsInterface,
         column_name: str
     ) -> str:
+        """
+        Append column.
+
+        Parameters
+        ----------
+        records : RecordsInterface
+            Records interface.
+        column_name : str
+            Column name.
+
+        Returns
+        -------
+        str
+            Append column name.
+
+        """
         key = column_name
 
         if key == records.columns[0] and len(self._count) > 0 and key in self._count.keys():
@@ -61,6 +77,20 @@ class ColumnMerger():
         self,
         records: RecordsInterface,
     ) -> list[str]:
+        """
+        Append columns.
+
+        Parameters
+        ----------
+        records : RecordsInterface
+            Records interface.
+
+        Returns
+        -------
+        list[str]
+            Renamed columns.
+
+        """
         renamed_columns: list[str] = []
         for column in records.columns:
             renamed_columns.append(
@@ -72,6 +102,20 @@ class ColumnMerger():
         self,
         records: RecordsInterface,
     ) -> dict[str, str]:
+        """
+        Append columns and return rename rule.
+
+        Parameters
+        ----------
+        records : RecordsInterface
+            Records interface.
+
+        Returns
+        -------
+        dict[str, str]
+            Renamed rule.
+
+        """
         renamed_columns: list[str] = self.append_columns(records)
         return self._to_rename_rule(records.columns, renamed_columns)
 
@@ -79,6 +123,15 @@ class ColumnMerger():
     def column_names(
         self
     ) -> list[str]:
+        """
+        Get column names.
+
+        Returns
+        -------
+        list[str]
+            Column names.
+
+        """
         return self._column_names
 
     @staticmethod
@@ -104,6 +157,24 @@ class RecordsMerged:
         include_first_callback: bool = False,
         include_last_callback: bool = False
     ) -> None:
+        """
+        Construct an instance.
+
+        Parameters
+        ----------
+        merge_targets : list[NodePath | Communication]
+            Merge targets.
+        include_first_callback : bool
+            Flags for including the processing time of the first callback in the path analysis.
+        include_last_callback : bool
+            Flags for including the processing time of the last callback in the path analysis.
+
+        Raises
+        ------
+        InvalidArgumentError
+            There are no records to be merged.
+
+        """
         if len(merge_targets) == 0:
             raise InvalidArgumentError('There are no records to be merged.')
         self._data = self._merge_records(
@@ -113,6 +184,15 @@ class RecordsMerged:
 
     @property
     def data(self) -> RecordsInterface:
+        """
+        Get data.
+
+        Returns
+        -------
+        RecordsInterface
+            Records data.
+
+        """
         return self._data
 
     @staticmethod
@@ -122,6 +202,12 @@ class RecordsMerged:
         include_last_callback: bool = False
     ) -> RecordsInterface:
         logger.info('Started merging path records.')
+
+        def is_match_column(column: str, target_name: str) -> bool:
+            last_slash_index = column.rfind('/')
+            if last_slash_index >= 0:
+                column = column[:last_slash_index]
+            return column.endswith(target_name)
 
         column_merger = ColumnMerger()
         if include_first_callback and isinstance(targets[0], NodePath):
@@ -151,14 +237,19 @@ class RecordsMerged:
                     logger.info(msg)
                 else:
                     msg = 'Detected dummy_records before merging end_records. merge terminated.'
-                    logger.warn(msg)
+                    logger.warning(msg)
                 break
             rename_rule = column_merger.append_columns_and_return_rename_rule(
                 right_records)
             right_records.rename_columns(rename_rule)
 
+            # adjust the columns for the case that the message is not taken by callback
+            if is_match_column(right_records.columns[0], 'source_timestamp'):
+                left_records.drop_columns([left_records.columns[-1]])
+
             if left_records.columns[-1] != right_records.columns[0]:
                 raise InvalidRecordsError('left columns[-1] != right columns[0]')
+
             left_stamp_key = left_records.columns[-1]
             right_stamp_key = right_records.columns[0]
 
@@ -201,25 +292,47 @@ class RecordsMerged:
                 )
 
         if include_last_callback and isinstance(targets[-1], NodePath):
-            right_records = targets[-1].to_path_end_records()
+            if not is_match_column(left_records.columns[-1], 'source_timestamp'):
+                right_records = targets[-1].to_path_end_records()
 
-            rename_rule = column_merger.append_columns_and_return_rename_rule(right_records)
-            right_records.rename_columns(rename_rule)
-            if left_records.columns[-1] != right_records.columns[0]:
-                raise InvalidRecordsError('left columns[-1] != right columns[0]')
-            left_records = merge(
-                left_records=left_records,
-                right_records=right_records,
-                join_left_key=left_records.columns[-1],
-                join_right_key=right_records.columns[0],
-                columns=Columns.from_str(
-                    left_records.columns + right_records.columns
-                ).column_names,
-                how='left'
-            )
+                rename_rule = column_merger.append_columns_and_return_rename_rule(right_records)
+                right_records.rename_columns(rename_rule)
+                if left_records.columns[-1] != right_records.columns[0]:
+                    raise InvalidRecordsError('left columns[-1] != right columns[0]')
+                if len(right_records.data) != 0:
+                    left_records = merge(
+                        left_records=left_records,
+                        right_records=right_records,
+                        join_left_key=left_records.columns[-1],
+                        join_right_key=right_records.columns[0],
+                        columns=Columns.from_str(
+                            left_records.columns + right_records.columns
+                        ).column_names,
+                        how='left'
+                    )
+                else:
+                    msg = 'Empty records are not merged.'
+                    logger.warning(msg)
+            else:
+                msg = 'Since the path cannot be extended, '
+                msg += 'the merge process for the last callback record is skipped.'
+                logger.warning(msg)
 
         logger.info('Finished merging path records.')
         left_records.sort(first_column)
+
+        # search drop columns, which contain 'source_timestamp'
+        source_columns = [
+            column for column in left_records.columns
+            if is_match_column(column, 'source_timestamp')
+        ]
+        left_records.drop_columns(source_columns)
+
+        rmw_take_column = [
+            column for column in left_records.columns
+            if is_match_column(column, 'rmw_take_timestamp')
+        ]
+        left_records.drop_columns(rmw_take_column)
 
         return left_records
 
@@ -271,6 +384,15 @@ class Path(PathBase, Summarizable):
 
     @property
     def include_first_callback(self) -> bool:
+        """
+        Get include first callback.
+
+        Returns
+        -------
+        bool
+            Flags for including the processing time of the first callback in the path analysis.
+
+        """
         return self._include_first_callback
 
     @include_first_callback.setter
@@ -279,6 +401,15 @@ class Path(PathBase, Summarizable):
 
     @property
     def include_last_callback(self) -> bool:
+        """
+        Get include last callback.
+
+        Returns
+        -------
+        bool
+            Flags for including the processing time of the last callback in the path analysis.
+
+        """
         return self._include_last_callback
 
     @include_last_callback.setter
@@ -286,6 +417,15 @@ class Path(PathBase, Summarizable):
         self._include_last_callback = include_last_callback
 
     def to_records(self) -> RecordsInterface:
+        """
+        Calculate records.
+
+        Returns
+        -------
+        RecordsInterface
+            Execution time of each operation.
+
+        """
         if (self._include_first_callback, self._include_last_callback) \
                 not in self.__records_cache.keys():
             try:
@@ -341,6 +481,24 @@ class Path(PathBase, Summarizable):
         return is_valid
 
     def get_child(self, name: str):
+        """
+        Get child.
+
+        Parameters
+        ----------
+        name : str
+            Topic name or node name.
+
+        Raises
+        ------
+        InvalidArgumentError
+            Occurs when the given argument type is invalid.
+        ItemNotFoundError
+            Occurs when no items were found.
+        MultipleItemFoundError
+            Occurs when several items were found.
+
+        """
         # TODO(hsgwa): This function is not needed. Remove.
 
         if not isinstance(name, str):

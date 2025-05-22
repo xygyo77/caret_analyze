@@ -36,6 +36,25 @@ class EventCounter:
             self._validate()
 
     def get_count(self, groupby: list[str]) -> pd.DataFrame:
+        """
+        Get event counter in pandas DataFrame format.
+
+        Parameters
+        ----------
+        groupby : list[str]
+            Data group.
+
+        Returns
+        -------
+        pd.DataFrame
+            Event counter dataframe.
+
+        Raises
+        ------
+        InvalidArgumentError
+            Occurs when groupby keys were invalid.
+
+        """
         if len(set(groupby) - self._allowed_keys) > 0:
             raise InvalidArgumentError(
                 f'invalid groupby: {groupby}. {self._allowed_keys} are allowed.')
@@ -59,6 +78,8 @@ class EventCounter:
         trace_points_added_by_ld_preload = {
             'ros2_caret:add_callback_group',
             'ros2_caret:add_callback_group_static_executor',
+            'ros2_caret:callback_group_to_executor_entity_collector',
+            'ros2_caret:executor_entity_collector_to_executor',
             'ros2_caret:construct_executor',
             'ros2_caret:construct_static_executor',
             'ros2_caret:callback_group_add_timer',
@@ -77,6 +98,11 @@ class EventCounter:
             'ros2_caret:rmw_implementation'
         }
 
+        dds_trace_points_added_by_ld_preload = {
+            'ros2_caret:dds_bind_addr_to_stamp',
+            'ros2_caret:dds_bind_addr_to_addr',
+        }
+
         trace_points_added_by_fork_rclcpp_for_intra_process = {
             'ros2:message_construct',
             'ros2:rclcpp_intra_publish',
@@ -86,6 +112,13 @@ class EventCounter:
         trace_points_added_by_fork_rclcpp_for_inter_process = {
             'ros2:dispatch_subscription_callback',
         }
+
+        if len(set(recorded_trace_points) & dds_trace_points_added_by_ld_preload) == 0:
+            raise InvalidTraceFormatError(
+                'Failed to find dds trace point added by LD_PRELOAD. '
+                'Measurement results will not be correct. '
+                'Function symbols used for hooks may be hidden in the DDS layer.'
+            )
 
         if len(set(recorded_trace_points) & trace_points_added_by_ld_preload) == 0:
             raise InvalidTraceFormatError(
@@ -167,6 +200,10 @@ class EventCounter:
             'ros2:rcl_lifecycle_state_machine_init': data.lifecycle_state_machines.df,
             'ros2_caret:add_callback_group': data.callback_groups.df,
             'ros2_caret:add_callback_group_static_executor': data.callback_groups_static.df,
+            'ros2_caret:callback_group_to_executor_entity_collector':
+                data.callback_group_to_executor_entity_collector.df,
+            'ros2_caret:executor_entity_collector_to_executor':
+                data.executor_entity_collector_to_executor.df,
             'ros2_caret:construct_executor': data.executors.df,
             'ros2_caret:construct_static_executor': data.executors_static.df,
             'ros2_caret:callback_group_add_timer': data.callback_group_timer.df,
@@ -220,6 +257,8 @@ class EventCounter:
         sub_cb_to_topic_name: dict[int, str] = {}
         sub_to_topic_name: dict[int, str] = {}
         sub_to_node_name: dict[int, str] = {}
+        rmw_handle_to_node_name: dict[int, str] = {}
+        rmw_handle_to_topic_name: dict[int, str] = {}
 
         def ns_and_node_name(ns: str, name: str) -> str:
             if ns[-1] == '/':
@@ -239,6 +278,9 @@ class EventCounter:
             sub_handle_to_node_name[handler] = \
                 node_handle_to_node_name.get(row['node_handle'], '-')
             sub_handle_to_topic_name[handler] = row['topic_name']
+            rmw_handle_to_node_name[row['rmw_handle']] = \
+                node_handle_to_node_name.get(row['node_handle'], '-')
+            rmw_handle_to_topic_name[row['rmw_handle']] = row['topic_name']
 
         for handler, row in data.timer_node_links.df.iterrows():
             timer_handle_to_node_name[handler] = \
@@ -272,7 +314,7 @@ class EventCounter:
         count_dict = []
         group_keys = [
             'callback_object', 'publisher_handle', 'subscription_handle',
-            'tilde_publisher', 'tilde_subscription'
+            'tilde_publisher', 'tilde_subscription', 'rmw_subscription_handle'
         ]
         for trace_point, df in trace_point_and_df.items():
             df = df.reset_index()
@@ -293,6 +335,8 @@ class EventCounter:
                 df['publisher_handle'] = '-'
             if 'subscription_handle' not in df.columns:
                 df['subscription_handle'] = '-'
+            if 'rmw_subscription_handle' not in df.columns:
+                df['rmw_subscription_handle'] = '-'
 
             if trace_point in ['ros2_caret:tilde_publish', 'ros2_caret:tilde_publisher_init']:
                 df['tilde_publisher'] = df['publisher']
@@ -330,6 +374,10 @@ class EventCounter:
                         key[4] in tilde_sub_to_topic_name:
                     topic_name = tilde_sub_to_topic_name.get(key[4], '-')
                     node_name = tilde_sub_to_node_name.get(key[4], '-')
+                elif key[5] in rmw_handle_to_node_name or \
+                        key[5] in rmw_handle_to_topic_name:
+                    topic_name = rmw_handle_to_topic_name.get(key[5], '-')
+                    node_name = rmw_handle_to_node_name.get(key[5], '-')
 
                 count_dict.append(
                     {

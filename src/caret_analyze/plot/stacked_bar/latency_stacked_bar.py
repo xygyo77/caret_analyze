@@ -18,7 +18,7 @@ import pandas as pd
 
 from ..util import get_clock_converter
 from ...common import ClockConverter
-from ...record import RecordsInterface, ResponseTime, StackedBar
+from ...record import ColumnValue, RecordsInterface, ResponseTime, StackedBar
 from ...runtime import Path
 
 
@@ -49,6 +49,11 @@ class LatencyStackedBar:
         -------
         pd.DataFrame
             Latency dataframe.
+
+        Raises
+        ------
+        NotImplementedError
+            Argument xaxis_type is not "system_time" or "sim_time".
 
         """
         # NOTE: returned columns aren't used because they don't include 'start time'
@@ -108,22 +113,44 @@ class LatencyStackedBar:
         RecordsInterface
             Response time records of the path.
 
+        Raises
+        ------
+        ValueError
+            - Case is not "all", "best", "worst", or "worst-with-external-latency".
+
         """
         response_time = ResponseTime(target_object.to_records(),
                                      columns=target_object.column_names)
         # include timestamp of response time (best, worst)
         if self._case == 'all':
-            return response_time.to_all_stacked_bar()
+            record_if = response_time.to_all_stacked_bar()
         elif self._case == 'best':
-            return response_time.to_best_case_stacked_bar()
+            record_if = response_time.to_best_case_stacked_bar()
         elif self._case == 'worst':
-            return response_time.to_worst_case_stacked_bar()
+            record_if = response_time.to_worst_case_stacked_bar()
         elif self._case == 'worst-with-external-latency':
-            return response_time.to_worst_with_external_latency_case_stacked_bar()
+            record_if = response_time.to_worst_with_external_latency_case_stacked_bar()
         else:
             raise ValueError('optional argument "case" must be following: \
                                 "all", "best", "worst", "worst-with-external-latency".')
 
+        if response_time._has_invalid_timestamps() is True:
+            columns = []
+            columns += [ColumnValue(column) for column in response_time._records._columns]
+            columns += [ColumnValue('invalid_timestamps')]
+            record_if = response_time._records._create_empty_records(columns)
+
+        return record_if
+
     @property
     def target_objects(self) -> Path:
+        """
+        Get target objects.
+
+        Returns
+        -------
+        Path
+            target objects.
+
+        """
         return self._target_objects

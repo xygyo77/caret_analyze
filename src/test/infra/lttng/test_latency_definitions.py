@@ -55,7 +55,7 @@ def bridge_mock(
 ):
     bridge_mock = mocker.Mock(spec=LttngBridge)
     mocker.patch(
-        'caret_analyze.infra.lttng.bridge.LttngBridge',
+        'caret_analyze.infra.lttng.records_provider_lttng.LttngBridge',
         return_value=bridge_mock,
     )
     return bridge_mock
@@ -1232,11 +1232,13 @@ class TestNodeRecords:
             [
                 {
                     f'{subscription.callback_name}/callback_start_timestamp': 1,
+                    f'{subscription.topic_name}/source_timestamp': 3,
                     f'{publisher.topic_name}/rclcpp_publish_timestamp': 2,
                 }
             ],
             columns=[
                 f'{subscription.callback_name}/callback_start_timestamp',
+                f'{subscription.topic_name}/source_timestamp',
                 f'{publisher.topic_name}/rclcpp_publish_timestamp',
             ],
             dtype='Int64'
@@ -1378,6 +1380,7 @@ class TestCommunicationRecords:
         df_expect = pd.DataFrame(
             columns=[
                 f'{communication.topic_name}/rclcpp_publish_timestamp',
+                f'{communication.topic_name}/source_timestamp',
                 f'{callback.callback_name}/callback_start_timestamp',
             ],
             dtype='Int64'
@@ -1461,6 +1464,7 @@ class TestCommunicationRecords:
                     f'{communication.topic_name}/rcl_publish_timestamp': 2,
                     f'{communication.topic_name}/dds_write_timestamp': 3,
                     # f'{communication.topic_name}/message_timestamp': message_stamp,
+                    f'{communication.topic_name}/source_timestamp': 9,
                     f'{callback.callback_name}/callback_start_timestamp': 16,
                 }
             ],
@@ -1469,6 +1473,7 @@ class TestCommunicationRecords:
                 f'{communication.topic_name}/rcl_publish_timestamp',
                 f'{communication.topic_name}/dds_write_timestamp',
                 # f'{communication.topic_name}/message_timestamp',
+                f'{communication.topic_name}/source_timestamp',
                 f'{callback.callback_name}/callback_start_timestamp',
             ],
             dtype='Int64'
@@ -1599,18 +1604,22 @@ class TestCommunicationRecords:
             [
                 {
                     f'{communication.topic_name}/rclcpp_publish_timestamp': 1,
+                    f'{communication.topic_name}/source_timestamp': 9,
                     f'{callback.callback_name}/callback_start_timestamp': 16,
                 },
                 {
                     f'{communication.topic_name}/rclcpp_publish_timestamp': 17,
+                    f'{communication.topic_name}/source_timestamp': 109,
                 },
                 {
                     f'{communication.topic_name}/rclcpp_publish_timestamp': 19,
+                    f'{communication.topic_name}/source_timestamp': 209,
                     f'{callback.callback_name}/callback_start_timestamp': 22,
                 }
             ],
             columns=[
                 f'{communication.topic_name}/rclcpp_publish_timestamp',
+                f'{communication.topic_name}/source_timestamp',
                 f'{callback.callback_name}/callback_start_timestamp',
             ],
             dtype='Int64'
@@ -2026,3 +2035,34 @@ class TestSimTimeConverter:
 
         assert converter.convert(0) - 1.0 <= 1e-6
         assert converter.convert(1) - 2.0 <= 1e-6
+
+    def test_converter_compare(
+        self,
+        create_lttng,
+        caplog
+    ):
+        data = Ros2DataModel()
+        # pid, tid = 4, 5
+        data.add_sim_time(100, 200)
+        data.add_sim_time(200, 300)
+        data.add_sim_time(300, 350)
+        data.add_sim_time(400, 400)
+        data.finalize()
+
+        lttng = create_lttng(data)
+        provider = RecordsProviderLttng(lttng)
+        min_ns = 100
+        max_ns = 400
+        converter = provider.get_sim_time_converter(min_ns, max_ns)
+        s100 = converter.convert(100)
+        s300 = converter.convert(300)
+        # out of range
+        min_ns = 201
+        max_ns = 299
+        converter = provider.get_sim_time_converter(min_ns, max_ns)
+        d100 = converter.convert(100)
+        d300 = converter.convert(300)
+
+        assert (s100 == d100)
+        assert (s300 == d300)
+        assert 'Out-of-range time is used to convert sim_time' in caplog.messages[0]

@@ -73,6 +73,8 @@ class TestEventCounter:
         data.add_dispatch_intra_process_subscription_callback_instance(0, 0, 0, 0)
         data.add_tilde_subscribe(0, 0, 0)
         data.add_tilde_publish(0, 0, 0, 0)
+        data.add_callback_group_to_executor_entity_collector(0, 0, 0, 0)
+        data.add_executor_entity_collector_to_executor(0, 0, 0)
         data.add_executor(0, 0, '')
         data.add_executor_static(0, 0, 0, '')
         data.add_callback_group(0, 0, 0, '')
@@ -105,6 +107,21 @@ class TestEventCounter:
         with pytest.raises(InvalidTraceFormatError):
             EventCounter(data)
 
+    def test_validation_without_dds_tracepoint(
+        self,
+        mocker,
+    ):
+        data = Ros2DataModel()
+        data.add_dispatch_subscription_callback_instance(0, 0, 0, 0, 0)  # pass rclcpp-check
+        data.add_dds_write_instance(0, 0, 0)  # pass LD_PRELOAD check
+        data.finalize()
+
+        logger = getLogger('caret_analyze.infra.lttng.event_counter')
+        logger.propagate = True
+
+        with pytest.raises(InvalidTraceFormatError):
+            EventCounter(data)
+
     @pytest.mark.parametrize(
         'use_intra_process, has_rmw_take', (
             [False, False],
@@ -120,6 +137,7 @@ class TestEventCounter:
     ):
         data = Ros2DataModel()
         data.add_dds_write_instance(0, 0, 0)  # pass LD_PRELOAD check
+        data.add_dds_bind_addr_to_stamp(0, 0, 0, 0)  # pass dds layer check
         if has_rmw_take:
             data.add_rmw_take_instance(0, 0, 0, 0, 0)  # pass rmw_take check
         if use_intra_process:
@@ -159,6 +177,7 @@ class TestEventCounter:
         data = Ros2DataModel()
         # pass rclcpp-check
         data.add_dds_write_instance(0, 0, 0)  # pass LD_PRELOAD check
+        data.add_dds_bind_addr_to_stamp(0, 0, 0, 0)  # pass dds layer check
         data.add_rmw_take_instance(0, 0, 0, 0, 0)  # pass rmw_take check
         if use_caret_rclcpp:
             data.add_rclcpp_publish_instance(0, 0, 1, 0, 0)  # set publisher_handle to non-zero
@@ -187,6 +206,7 @@ class TestEventCounter:
         distribution = 'distribution'
         data.add_caret_init(0, 0, distribution)
         data.add_dds_write_instance(0, 0, 0)  # pass LD_PRELOAD check
+        data.add_dds_bind_addr_to_stamp(0, 0, 0, 0)  # pass dds layer check
         data.finalize()
 
         event_counter = EventCounter(data)
@@ -204,6 +224,7 @@ class TestEventCounter:
         data = Ros2DataModel()
         data.add_caret_init(0, 0, distribution)
         data.add_dds_write_instance(0, 0, 0)  # pass LD_PRELOAD check
+        data.add_dds_bind_addr_to_stamp(0, 0, 0, 0)  # pass dds layer check
         data.finalize()
 
         logger = getLogger('caret_analyze.infra.lttng.event_counter')
@@ -221,8 +242,9 @@ class TestEventCounter:
         mocker,
     ):
         data = Ros2DataModel()
-        data.add_dispatch_subscription_callback_instance(0, 0, 0, 0, 0)
-        data.add_dds_write_instance(0, 0, 0)
+        data.add_dispatch_subscription_callback_instance(0, 0, 0, 0, 0)  # pass rclcpp-check
+        data.add_dds_write_instance(0, 0, 0)  # pass LD_PRELOAD check
+        data.add_dds_bind_addr_to_stamp(0, 0, 0, 0)  # pass dds layer check
         data.finalize()
 
         logger = getLogger('caret_analyze.infra.lttng.event_counter')

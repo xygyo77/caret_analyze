@@ -17,12 +17,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from logging import getLogger
 
+from bokeh import __version__ as bokeh_version
 from bokeh.models import HoverTool
 from bokeh.models.renderers import GlyphRenderer
 
 from bokeh.plotting import figure as Figure
 
 import numpy as np
+from packaging import version
 
 from .callback_scheduling import BokehCallbackSched
 from .message_flow import BokehMessageFlow
@@ -56,6 +58,35 @@ class Bokeh(VisualizeLibInterface):
         lstrip_s: float,
         rstrip_s: float
     ) -> Figure:
+        """
+        Get message flow figure.
+
+        Parameters
+        ----------
+        target_path : Path
+            The target path.
+        xaxis_type : str, optional
+            Type of x-axis of the line graph to be plotted.
+            "system_time", "index", or "sim_time" can be specified.
+            The default is "system_time".
+        ywheel_zoom : bool, optional
+            If True, the drawn graph can be expanded in the y-axis direction
+            by the mouse wheel.
+        granularity : str
+            Granularity.
+        treat_drop_as_delay : bool
+            Treat drop as delay.
+        lstrip_s : float, optional
+            Start time of cropping range, by default 0.
+        rstrip_s: float, optional
+            End point of cropping range, by default 0.
+
+        Returns
+        -------
+        bokeh.plotting.Figure
+            Figure of message flow.
+
+        """
         message_flow = BokehMessageFlow(
             target_path, xaxis_type, ywheel_zoom, granularity,
             treat_drop_as_delay, lstrip_s, rstrip_s,
@@ -70,6 +101,33 @@ class Bokeh(VisualizeLibInterface):
         full_legends: bool,
         case: str,  # all, best, worst or worst-with-external-latency
     ) -> Figure:
+        """
+        Get a stacked bar figure.
+
+        Parameters
+        ----------
+        metrics : MetricsBase
+            Metrics to be y-axis in visualization.
+        xaxis_type : str
+            Type of x-axis of the line graph to be plotted.
+            "system_time", "index", or "sim_time" can be specified.
+            The default is "system_time".
+        ywheel_zoom : bool
+            If True, the drawn graph can be expanded in the y-axis direction
+            by the mouse wheel.
+        full_legends : bool
+            If True, all legends are drawn
+            even if the number of legends exceeds the threshold.
+        case : str
+            Parameter specifying all, best, worst, or worst-with-external-latency.
+            Use to create Response time timeseries graph.
+
+        Returns
+        -------
+        bokeh.plotting.Figure
+            Figure of stacked bar.
+
+        """
         stacked_bar = BokehStackedBar(metrics, xaxis_type, ywheel_zoom, full_legends, case)
         return stacked_bar.create_figure()
 
@@ -111,6 +169,7 @@ class Bokeh(VisualizeLibInterface):
         Returns
         -------
         bokeh.plotting.Figure
+            Figure of callback scheduling.
 
         """
         callback_scheduling = BokehCallbackSched(
@@ -148,7 +207,6 @@ class Bokeh(VisualizeLibInterface):
             Parameter specifying all, best, worst, or worst-with-external-latency.
             Use to create Response time timeseries graph.
 
-
         Returns
         -------
         bokeh.plotting.Figure
@@ -183,14 +241,16 @@ class Bokeh(VisualizeLibInterface):
         case : str
             Parameter specifying all, best, worst, or worst-with-external-latency.
             Use to create Response time histogram graph.
-        converter: ClockConverter
-            Time conversion function at sim_time.
-
 
         Returns
         -------
         bokeh.plotting.Figure
             Figure of histogram.
+
+        Raises
+        ------
+        NotImplementedError
+            Argument metrics_name is not "frequency", "period", "latency", or "response_time".
 
         """
         legend_manager = LegendManager()
@@ -223,9 +283,17 @@ class Bokeh(VisualizeLibInterface):
                     top=top, bottom=0, left=bins[i], right=bins[i+1],
                     color=color, alpha=1, line_color='white'
                     )
-                hover = HoverTool(
-                    tooltips=[(x_label, f'{bins[i]}'), ('The number of samples', f'{top}')],
-                    renderers=[quad]
+                if version.parse(bokeh_version) >= version.parse('3.4.0'):
+                    hover = HoverTool(
+                        tooltips=[(x_label, f'{bins[i]}'), ('The number of samples', f'{top}')],
+                        renderers=[quad],
+                        visible=False
+                        )
+                else:
+                    hover = HoverTool(
+                        tooltips=[(x_label, f'{bins[i]}'), ('The number of samples', f'{top}')],
+                        renderers=[quad],
+                        toggleable=False
                     )
                 plot.add_tools(hover)
                 quad_dicts[target_object] = quad_dicts[target_object] + [quad]

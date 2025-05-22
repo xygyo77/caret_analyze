@@ -18,6 +18,8 @@ from abc import ABCMeta, abstractmethod
 from copy import deepcopy
 from logging import getLogger
 
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -181,6 +183,11 @@ class PathBase(metaclass=ABCMeta):
             time[ns], latency[ns]
             len(time) == len(latency)
 
+        Raises
+        ------
+        InvalidRecordsError
+            Failed to find any records.
+
         """
         df = self.to_dataframe(
             remove_dropped, treat_drop_as_delay, lstrip_s, rstrip_s, shaper=shaper)
@@ -241,8 +248,6 @@ class PathBase(metaclass=ABCMeta):
             https://numpy.org/doc/stable/reference/generated/numpy.histogram.html
 
         """
-        import math
-
         remove_dropped = not treat_drop_as_delay
         _, latency_ns = self.to_timeseries(
             remove_dropped, treat_drop_as_delay, lstrip_s, rstrip_s, shaper=shaper)

@@ -30,7 +30,6 @@ from caret_analyze.value_objects.service import ServiceValue
 from caret_analyze.value_objects.subscription import SubscriptionValue
 from caret_analyze.value_objects.timer import TimerValue
 
-
 import pandas as pd
 
 import pytest
@@ -646,6 +645,101 @@ class TestLttngInfo:
         )
         assert cbg_info == [cbg_info_expect]
 
+    def test_get_undefined_callback_groups_info(self, mocker):
+        node_handle = 3
+        callback_object = 10
+        node_name = '/node1'
+        cbg_addr = 8
+
+        formatted_mock = mocker.Mock(spec=DataFrameFormatted)
+        mocker.patch('caret_analyze.infra.lttng.lttng_info.DataFrameFormatted',
+                     return_value=formatted_mock)
+
+        timer = TracePointData(pd.DataFrame.from_dict(
+            [
+                {
+                    'callback_object': callback_object,
+                    'node_handle': node_handle,
+                    'timer_handle': 0,
+                    'callback_group_addr': cbg_addr,
+                    'period_ns': 0,
+                    'symbol': 'symbol',
+                    'callback_id': 'timer_callback_0'
+                }
+            ]
+        ))
+        mocker.patch.object(formatted_mock, 'timer_callbacks', timer)
+
+        sub = TracePointData(pd.DataFrame.from_dict(
+            [
+                {
+                    'callback_object': callback_object,
+                    'callback_object_intra': 0,
+                    'node_handle': node_handle,
+                    'subscription_handle': 0,
+                    'callback_group_addr': cbg_addr,
+                    'topic_name': 'topic',
+                    'symbol': 'symbol',
+                    'callback_id': 'subscription_callback_0',
+                    'depth': 0
+                },
+            ]
+        ))
+        mocker.patch.object(
+            formatted_mock, 'subscription_callbacks', sub)
+
+        srv = TracePointData(pd.DataFrame.from_dict(
+            [
+                {
+                    'callback_object': callback_object,
+                    'node_handle': node_handle,
+                    'service_handle': 0,
+                    'callback_group_addr': cbg_addr,
+                    'service_name': 'service',
+                    'symbol': 'symbol',
+                    'callback_id': 'service_callback_0'
+                },
+            ]
+        ))
+        mocker.patch.object(
+            formatted_mock, 'service_callbacks', srv)
+
+        node = TracePointData(pd.DataFrame.from_dict(
+            [
+                {
+                    'node_id': 'node_id',
+                    'node_handle': node_handle,
+                    'node_name': node_name
+                }
+            ]
+        ))
+        mocker.patch.object(formatted_mock, 'nodes', node)
+
+        cbg = TracePointData(pd.DataFrame(columns=[
+            'callback_group_id',
+            'callback_group_addr',
+            'executor_addr',
+            'group_type_name']
+        ))
+        mocker.patch.object(formatted_mock, 'callback_groups', cbg)
+
+        data = Ros2DataModel()
+        data.finalize()
+        info = LttngInfo(data)
+        cbg_info = info.get_callback_groups(NodeValue(node_name, 'node_id'))
+        dummy_addr_expect = 0
+        callback_group_id_expect = f'callback_group_{cbg_addr}'
+        cbg_info_expect = CallbackGroupValueLttng(
+            CallbackGroupType.UNDEFINED.type_name,
+            '/node1',
+            'node_id',
+            ('timer_callback_0', 'subscription_callback_0', 'service_callback_0'),
+            callback_group_id_expect,
+            callback_group_addr=cbg_addr,
+            executor_addr=dummy_addr_expect,
+        )
+        assert cbg_info == [cbg_info_expect]
+
     def test_get_executors_info(self, mocker):
         cbg_addr = 13
         executor_addr = 15
@@ -1147,38 +1241,18 @@ class TestDataFrameFormatted:
         assert nodes.df.equals(expect)
 
     def test_build_callback_groups_df(self):
-        exec_addr = 2
-        callback_group_addr = 3
-        group_type = 'reentrant'
-
-        data = Ros2DataModel()
-        data.add_callback_group(exec_addr, 0, callback_group_addr, group_type)
-        data.finalize()
-
-        cbg = DataFrameFormatted._build_cbg(data)
-
-        expect = pd.DataFrame.from_dict(
-            [{
-                'callback_group_id': f'callback_group_{callback_group_addr}',
-                'callback_group_addr': callback_group_addr,
-                'group_type_name': group_type,
-                'executor_addr': exec_addr,
-            }]
-        ).convert_dtypes()
-        assert cbg.df.equals(expect)
-
-    def test_build_callback_groups_static_df(self):
         group_type = 'reentrant'
         collector_addr = 2
         cbg_addr = 3
         exec_addr = 4
 
-        data = Ros2DataModel()
-        data.add_callback_group_static_executor(collector_addr, 0, cbg_addr, group_type)
-        data.add_executor_static(exec_addr, collector_addr, 0, 'exec_type')
-        data.finalize()
+        data_humble = Ros2DataModel()
+        data_humble.add_caret_init(0, 0, 'humble')
+        data_humble.add_callback_group_static_executor(collector_addr, 0, cbg_addr, group_type)
+        data_humble.add_executor_static(exec_addr, collector_addr, 0, 'exec_type')
+        data_humble.finalize()
 
-        cbg = DataFrameFormatted._build_cbg(data)
+        cbg_humble = DataFrameFormatted._build_cbg(data_humble)
 
         expect = pd.DataFrame.from_dict(
             [{
@@ -1188,7 +1262,30 @@ class TestDataFrameFormatted:
                 'executor_addr': exec_addr,
             }]
         ).convert_dtypes()
-        assert cbg.df.equals(expect)
+        assert cbg_humble.df.equals(expect)
+
+        data_jazzy = Ros2DataModel()
+        data_jazzy.add_caret_init(0, 0, 'jazzy')
+        data_jazzy.add_callback_group_to_executor_entity_collector(
+            collector_addr, cbg_addr, group_type, 0)
+        data_jazzy.add_executor_entity_collector_to_executor(
+            exec_addr, collector_addr, 0)
+        data_jazzy.add_executor_static(exec_addr, collector_addr, 0, 'exec_type')
+        data_jazzy.finalize()
+
+        cbg_jazzy = DataFrameFormatted._build_cbg(data_jazzy)
+
+        expect = pd.DataFrame.from_dict(
+            [{
+                'callback_group_id': f'callback_group_{cbg_addr}',
+                'callback_group_addr': cbg_addr,
+                'group_type_name': group_type,
+                'executor_addr': exec_addr,
+            }]
+        ).convert_dtypes()
+        assert cbg_jazzy.df.equals(expect)
+
+        assert cbg_humble.df.equals(cbg_jazzy.df)
 
     def test_build_publisher_df(self):
         pub_handle = 1

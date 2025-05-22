@@ -18,8 +18,10 @@ from collections.abc import Sequence
 from functools import cached_property
 from logging import getLogger
 
+from .bridge import LttngBridge
 from .column_names import COLUMN_NAME
 from .lttng import Lttng
+from .ros2_tracing.data_model_service import DataModelService
 from .value_objects import (PublisherValueLttng,
                             SubscriptionCallbackValueLttng,
                             TimerCallbackValueLttng)
@@ -66,6 +68,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         self._lttng = lttng
         self._source = FilteredRecordsSource(lttng)
         self._helper = RecordsProviderLttngHelper(lttng)
+        self._srv = DataModelService(lttng.data)
 
     def communication_records(
         self,
@@ -84,9 +87,17 @@ class RecordsProviderLttng(RuntimeDataProvider):
         RecordsInterface
             Columns
 
+            If inter-proc communication
+
             - [topic_name]/rclcpp_publish_timestamp
             - [topic_name]/rcl_publish_timestamp (Optional)
             - [topic_name]/dds_publish_timestamp (Optional)
+            - [topic_name]/source_timestamp
+            - [callback_name]/callback_start_timestamp
+
+            If intra-proc communication
+
+            - [topic_name]/rclcpp_publish_timestamp
             - [callback_name]/callback_start_timestamp
 
         """
@@ -101,6 +112,25 @@ class RecordsProviderLttng(RuntimeDataProvider):
         self,
         node_path_val: NodePathStructValue,
     ) -> RecordsInterface:
+        """
+        Provide node records.
+
+        Parameters
+        ----------
+        node_path_val : NodePathStructValue
+            Node path value.
+
+        Returns
+        -------
+        RecordsInterface
+            Record corresponding to specified message context type.
+
+        Raises
+        ------
+        UnsupportedNodeRecordsError
+            Occurs when message context type is unknown.
+
+        """
         if node_path_val.message_context is None:
             # dummy record
             msg = 'message context is None. return dummy record. '
@@ -135,7 +165,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         callback : CallbackStructValue
-            target callback value.
+            Target callback value.
 
         Returns
         -------
@@ -182,6 +212,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Raises
         ------
         InvalidArgumentError
+            Occurs when callback value were not exist.
 
         """
         callback = subscription.callback
@@ -193,6 +224,81 @@ class RecordsProviderLttng(RuntimeDataProvider):
             return self._subscribe_records(subscription)
 
         return self._subscribe_records_with_tilde(subscription)
+
+    def subscription_take_records(
+        self,
+        subscription: SubscriptionStructValue
+    ) -> RecordsInterface:
+        """
+        Provide subscription records.
+
+        This method is implemented for nodes which receive messages
+        by 'take' method instead of subscription callbacks.
+
+        Parameters
+        ----------
+        subscription : SubscriptionStructValue
+            Target subscription value.
+
+        Returns
+        -------
+        RecordsInterface
+            Columns
+
+            - [topic_name]/source_timestamp
+            - rmw_take_timestamp
+
+        Raises
+        ------
+        InvalidArgumentError
+            Occurs when callback value were not exist.
+
+        """
+        callback = subscription.callback
+        if callback is not None:
+            callback_objects = self._helper.get_subscription_callback_objects(callback)
+
+            try:
+                rmw_handle =\
+                    self._srv.get_rmw_subscription_handle_from_callback_object(callback_objects[0])
+            except InvalidArgumentError:
+                rmw_handle = None
+
+        # get rmw_records, which relates to callback_object
+        rmw_records: RecordsInterface
+        if rmw_handle is not None and rmw_handle in self._source._grouped_rmw_take_records:
+            rmw_records = self._source._grouped_rmw_take_records[rmw_handle].clone()
+        else:
+            rmw_records = RecordsFactory.create_instance(
+                None,
+                columns=[
+                    ColumnValue(COLUMN_NAME.TID),
+                    ColumnValue(COLUMN_NAME.RMW_TAKE_TIMESTAMP),
+                    ColumnValue(COLUMN_NAME.RMW_SUBSCRIPTION_HANDLE),
+                    ColumnValue(COLUMN_NAME.MESSAGE),
+                    ColumnValue(COLUMN_NAME.SOURCE_TIMESTAMP)
+                    ]
+                )
+
+        # drop columns
+        columns = rmw_records.columns
+        drop_columns = list(
+            set(columns) - {COLUMN_NAME.SOURCE_TIMESTAMP, COLUMN_NAME.RMW_TAKE_TIMESTAMP}
+            )
+        rmw_records.drop_columns(drop_columns)
+
+        # reindex
+        rmw_records.reindex([COLUMN_NAME.SOURCE_TIMESTAMP, COLUMN_NAME.RMW_TAKE_TIMESTAMP])
+
+        # add prefix to columns; e.g. [topic_name]/source_timestamp
+        self._rename_column(
+            rmw_records,
+            None if callback is None else callback.callback_name,
+            subscription.topic_name,
+            None
+        )
+
+        return rmw_records
 
     def _subscribe_records(
         self,
@@ -217,6 +323,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Raises
         ------
         InvalidArgumentError
+            Occurs when callback value were not exist.
 
         """
         callback = subscription.callback
@@ -271,6 +378,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Raises
         ------
         InvalidArgumentError
+            Occurs when callback value were not exist.
 
         """
         callback = subscription.callback
@@ -330,7 +438,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         publisher : PublisherStructValue
-            target publisher
+            Target publisher.
 
         Returns
         -------
@@ -371,23 +479,32 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         publisher : PublisherStructValue
-            target publisher
+            Target publisher.
 
         Returns
         -------
         RecordsInterface
+            (in the case of tilde publisher)
+
             Columns
 
             - [topic_name]/rclcpp_publish_timestamp
-            - [topic_name]/rclcpp_intra_publish_timestamp (Optional)
-            - [topic_name]/rclcpp_inter_publish_timestamp (Optional)
             - [topic_name]/rcl_publish_timestamp (Optional)
             - [topic_name]/dds_write_timestamp (Optional)
             - [topic_name]/message_timestamp
-            - [topic_name]/source_timestamp (Optional)
-            ---
-            - [topic_name]/tilde_publish_timestamp (Optional)
-            - [topic_name]/tilde_message_id (Optional)
+            - [topic_name]/source_timestamp
+            - [topic_name]/tilde_publish_timestamp
+            - [topic_name]/tilde_message_id
+
+            (for cases other than tilde publisher)
+
+            Columns
+
+            - [topic_name]/rclcpp_publish_timestamp
+            - [topic_name]/rcl_publish_timestamp (Optional)
+            - [topic_name]/dds_write_timestamp (Optional)
+            - [topic_name]/message_timestamp
+            - [topic_name]/source_timestamp
 
         """
         tilde_publishers = self._helper.get_tilde_publishers(publisher)
@@ -406,7 +523,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         publisher : PublisherStructValue
-            target publisher
+            Target publisher.
 
         Returns
         -------
@@ -414,8 +531,6 @@ class RecordsProviderLttng(RuntimeDataProvider):
             Columns
 
             - [topic_name]/rclcpp_publish_timestamp
-            - [topic_name]/rclcpp_intra_publish_timestamp
-            - [topic_name]/rclcpp_inter_publish_timestamp
             - [topic_name]/rcl_publish_timestamp (Optional)
             - [topic_name]/dds_write_timestamp (Optional)
             - [topic_name]/message_timestamp
@@ -467,7 +582,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         timer : TimerStructValue
-            [description]
+            Target timer.
 
         Returns
         -------
@@ -527,6 +642,25 @@ class RecordsProviderLttng(RuntimeDataProvider):
         subscription: SubscriptionStructValue,
         publisher: PublisherStructValue
     ) -> RecordsInterface:
+        """
+        Return tilde records.
+
+        Parameters
+        ----------
+        subscription : SubscriptionStructValue
+            Target subscription value.
+        publisher : PublisherStructValue
+            Target publisher value.
+
+        Returns
+        -------
+        RecordsInterface
+            Columns
+
+            - tilde_subscribe_timestamp
+            - tilde_publish_timestamp
+
+        """
         assert subscription.callback is not None
 
         publisher_addresses = self._helper.get_tilde_publishers(publisher)
@@ -560,12 +694,40 @@ class RecordsProviderLttng(RuntimeDataProvider):
         return records
 
     def get_rmw_implementation(self) -> str:
+        """
+        Get rmw implementation.
+
+        Returns
+        -------
+        str
+            Rmw implementation.
+
+        """
         return self._lttng.get_rmw_impl()
 
     def get_qos(
         self,
         pub_sub: PublisherStructValue | SubscriptionStructValue
     ) -> Qos:
+        """
+        Get qos.
+
+        Parameters
+        ----------
+        pub_sub : PublisherStructValue | SubscriptionStructValue
+            Target subscription or publisher.
+
+        Returns
+        -------
+        Qos
+            Subscription qos or publisher qos.
+
+        Raises
+        ------
+        InvalidArgumentError
+            Occurs when callback were not exist.
+
+        """
         if isinstance(pub_sub, SubscriptionStructValue):
             sub_cb = pub_sub.callback
             if sub_cb is None:
@@ -585,6 +747,29 @@ class RecordsProviderLttng(RuntimeDataProvider):
         return self._lttng.get_publisher_qos(pubs_lttng[0])
 
     def get_sim_time_converter(self, min_ns, max_ns) -> ClockConverter:
+        """
+        Get sim time converter.
+
+        Parameters
+        ----------
+        min_ns : float
+            Minimum timestamp value of the data
+                used to create the system time to sim_time converter.
+        max_ns : float
+            Maximum timestamp value of the data
+                used to create the system time to sim_time converter.
+
+        Returns
+        -------
+        ClockConverter
+            Object that converts timestamps from system time to sim_time.
+
+        Raises
+        ------
+        InvalidArgumentError
+            Failed to load sim_time.
+
+        """
         return self._lttng.get_sim_time_converter(min_ns, max_ns)
 
     def variable_passing_records(
@@ -597,7 +782,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         variable_passing_info : VariablePassingStructValue
-            target variable passing info.
+            Target variable passing info.
 
         Returns
         -------
@@ -640,6 +825,20 @@ class RecordsProviderLttng(RuntimeDataProvider):
         self,
         communication_value: CommunicationStructValue
     ) -> bool | None:
+        """
+        If inter-proc communication.
+
+        Parameters
+        ----------
+        communication_value : CommunicationStructValue
+            Communication value.
+
+        Returns
+        -------
+        bool | None
+            Intra process communication records count.
+
+        """
         intra_record = self._compose_intra_proc_comm_records(communication_value)
         return len(intra_record) > 0
 
@@ -653,12 +852,13 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         publisher : PublisherStructValue
-            target publisher
+            Target publisher.
 
         Returns
         -------
         RecordsInterface
             Columns
+
             - [node_name]/callback_start_timestamp
             - [topic_name]/rclcpp_publish_timestamp
 
@@ -684,12 +884,13 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         callback : CallbackStructValue
-            target callback
+            Target callback.
 
         Returns
         -------
         RecordsInterface
             Columns
+
             - [callback_name]/callback_start_timestamp
             - [callback_name]/callback_end_timestamp
 
@@ -725,6 +926,21 @@ class RecordsProviderLttng(RuntimeDataProvider):
         self,
         communication: CommunicationStructValue,
     ) -> bool:
+        """
+        Verify communication.
+
+        Parameters
+        ----------
+        communication : CommunicationStructValue
+            Communication value.
+
+        Returns
+        -------
+        bool
+            True if the trace points required to constitute a communication record are included
+            in the trace data, false otherwise.
+
+        """
         is_intra_proc = self.is_intra_process_communication(communication)
         if is_intra_proc is True:
             pub_node = communication.publish_node.node_name
@@ -808,7 +1024,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
         Parameters
         ----------
         comm_value : CommunicationStructValue
-            target communication value.
+            Target communication value.
 
         Returns
         -------
@@ -818,6 +1034,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
             - [topic_name]/rclcpp_publish_timestamp
             - [topic_name]/rcl_publish_timestamp (Optional)
             - [topic_name]/dds_write_timestamp (Optional)
+            - [topic_name]/source_timestamp
             - [callback_name_name]/callback_start_timestamp
 
         """
@@ -837,7 +1054,10 @@ class RecordsProviderLttng(RuntimeDataProvider):
             columns.append(COLUMN_NAME.RCL_PUBLISH_TIMESTAMP)
         if COLUMN_NAME.DDS_WRITE_TIMESTAMP in records.columns:
             columns.append(COLUMN_NAME.DDS_WRITE_TIMESTAMP)
-        columns.append(COLUMN_NAME.CALLBACK_START_TIMESTAMP)
+        columns += [
+            COLUMN_NAME.SOURCE_TIMESTAMP,
+            COLUMN_NAME.CALLBACK_START_TIMESTAMP,
+        ]
 
         self._format(records, columns)
 
@@ -897,6 +1117,10 @@ class RecordsProviderLttng(RuntimeDataProvider):
             rename_dict[COLUMN_NAME.SOURCE_TIMESTAMP] = \
                 f'{topic_name}/{COLUMN_NAME.SOURCE_TIMESTAMP}'
 
+        if COLUMN_NAME.RMW_TAKE_TIMESTAMP in records.columns:
+            rename_dict[COLUMN_NAME.RMW_TAKE_TIMESTAMP] =\
+                f'{topic_name}/{COLUMN_NAME.RMW_TAKE_TIMESTAMP}'
+
         if COLUMN_NAME.TILDE_SUBSCRIBE_TIMESTAMP in records.columns:
             rename_dict[COLUMN_NAME.TILDE_SUBSCRIBE_TIMESTAMP] = \
                 f'{topic_name}/{COLUMN_NAME.TILDE_SUBSCRIBE_TIMESTAMP}'
@@ -939,13 +1163,31 @@ class RecordsProviderLttngHelper:
         self,
         lttng: Lttng
     ) -> None:
-        from .bridge import LttngBridge
         self._bridge = LttngBridge(lttng)
 
     def get_callback_objects(
         self,
         callback: CallbackStructValue
     ) -> tuple[int, int | None]:
+        """
+        Get callback objects.
+
+        Parameters
+        ----------
+        callback : CallbackStructValue
+            Target callback.
+
+        Returns
+        -------
+        tuple[int, int | None]
+            Isinstance of TimerCallbackStructValue or SubscriptionCallbackStructValue.
+
+        Raises
+        ------
+        UnsupportedTypeError
+            Argument callback object is not supported.
+
+        """
         if isinstance(callback, TimerCallbackStructValue):
             return self.get_timer_callback_object(callback), None
 
@@ -964,6 +1206,20 @@ class RecordsProviderLttngHelper:
         self,
         callback: TimerCallbackStructValue
     ) -> int:
+        """
+        Get timer callback objects.
+
+        Parameters
+        ----------
+        callback : TimerCallbackStructValue
+            Target callback.
+
+        Returns
+        -------
+        int
+            Timer callback object.
+
+        """
         callback_lttng = self._bridge.get_timer_callback(callback)
         return callback_lttng.callback_object
 
@@ -971,12 +1227,40 @@ class RecordsProviderLttngHelper:
         self,
         callback: SubscriptionCallbackStructValue
     ) -> tuple[int, int | None]:
+        """
+        Get subscription callback objects.
+
+        Parameters
+        ----------
+        callback : SubscriptionCallbackStructValue
+            Target callback.
+
+        Returns
+        -------
+        tuple[int, int | None]
+            Subscription callback object.
+
+        """
         return self.get_callback_objects(callback)
 
     def get_subscription_callback_object_inter(
         self,
         callback: SubscriptionCallbackStructValue
     ) -> int:
+        """
+        Get subscription callback objects.
+
+        Parameters
+        ----------
+        callback : SubscriptionCallbackStructValue
+            Target callback.
+
+        Returns
+        -------
+        int
+            Subscription callback object.
+
+        """
         callback_lttng = self._bridge.get_subscription_callback(callback)
         return callback_lttng.callback_object
 
@@ -984,6 +1268,20 @@ class RecordsProviderLttngHelper:
         self,
         callback: SubscriptionCallbackStructValue
     ) -> int | None:
+        """
+        Get intra subscription callback objects.
+
+        Parameters
+        ----------
+        callback : SubscriptionCallbackStructValue
+            Target callback.
+
+        Returns
+        -------
+        int | None
+            Intra subscription callback object.
+
+        """
         callback_lttng = self._bridge.get_subscription_callback(callback)
         return callback_lttng.callback_object_intra
 
@@ -991,6 +1289,20 @@ class RecordsProviderLttngHelper:
         self,
         callback: SubscriptionCallbackStructValue
     ) -> int | None:
+        """
+        Get tilde subscription callback objects.
+
+        Parameters
+        ----------
+        callback : SubscriptionCallbackStructValue
+            Target callback.
+
+        Returns
+        -------
+        int | None
+            Tilde subscription callback object.
+
+        """
         callback_lttng = self._bridge.get_subscription_callback(callback)
         return callback_lttng.tilde_subscription
 
@@ -998,6 +1310,20 @@ class RecordsProviderLttngHelper:
         self,
         publisher: PublisherStructValue
     ) -> list[int]:
+        """
+        Get publisher callback objects.
+
+        Parameters
+        ----------
+        publisher : PublisherStructValue
+            Target publisher.
+
+        Returns
+        -------
+        list[int]
+            Publisher handles.
+
+        """
         publisher_lttng = self._bridge.get_publishers(publisher)
         return [pub_info.publisher_handle
                 for pub_info
@@ -1007,6 +1333,20 @@ class RecordsProviderLttngHelper:
         self,
         publisher_info: PublisherStructValue
     ) -> list[int]:
+        """
+        Get tilde publisher.
+
+        Parameters
+        ----------
+        publisher_info : PublisherStructValue
+            Target publisher info.
+
+        Returns
+        -------
+        list[int]
+            Tilde publisher.
+
+        """
         publisher_lttng = self._bridge.get_publishers(publisher_info)
         publisher = [pub_info.tilde_publisher
                      for pub_info
@@ -1018,18 +1358,60 @@ class RecordsProviderLttngHelper:
         self,
         publisher: PublisherStructValue
     ) -> list[PublisherValueLttng]:
+        """
+        Get lttng publishers.
+
+        Parameters
+        ----------
+        publisher : PublisherStructValue
+            Target publisher.
+
+        Returns
+        -------
+        list[PublisherValueLttng]
+            Publisher values of Lttng.
+
+        """
         return self._bridge.get_publishers(publisher)
 
     def get_lttng_subscription(
         self,
         callback: SubscriptionCallbackStructValue
     ) -> SubscriptionCallbackValueLttng:
+        """
+        Get lttng subscription.
+
+        Parameters
+        ----------
+        callback : SubscriptionCallbackStructValue
+            Target subscription callback.
+
+        Returns
+        -------
+        SubscriptionCallbackValueLttng
+            Subscription callback values of Lttng.
+
+        """
         return self._bridge.get_subscription_callback(callback)
 
     def get_lttng_timer(
         self,
         callback: TimerCallbackStructValue
     ) -> TimerCallbackValueLttng:
+        """
+        Get lttng timer.
+
+        Parameters
+        ----------
+        callback : TimerCallbackStructValue
+            Target timer callback.
+
+        Returns
+        -------
+        TimerCallbackValueLttng
+            Timer callback values of Lttng.
+
+        """
         return self._bridge.get_timer_callback(callback)
 
 
@@ -1241,17 +1623,66 @@ class NodeRecordsUseLatestMessage:
         assert self._node_path.subscription is not None and self._node_path.publisher is not None
 
         sub_records = self._provider.subscribe_records(self._node_path.subscription)
+
+        # If explicitly take message by user, there are cases that source_timestamp is 0.
+        def fill_source_timestamp_with_latest_timestamp(records):
+            source_columns = [s for s in records.columns if COLUMN_NAME.SOURCE_TIMESTAMP in s]
+            if len(source_columns) != 1:
+                return records
+            source_column = source_columns[0]
+
+            columns = []
+            for column in records.columns:
+                columns += [ColumnValue(column)]
+
+            records_data = []
+            latest_timestamp = 0
+
+            for record in records.data:
+                source_timestamp = record.data[source_column]
+                if source_timestamp == 0:
+                    record_dict = record.data
+                    record_dict[source_column] = latest_timestamp
+                    records_data.append(record_dict)
+                else:
+                    latest_timestamp = source_timestamp
+                    records_data.append(record.data)
+
+            new_records = RecordsFactory.create_instance(
+                records_data,
+                columns=columns
+            )
+            return new_records
+
+        is_take_node = len(sub_records) == 0
+        if is_take_node:
+            sub_records = self._provider.subscription_take_records(self._node_path.subscription)
+            # source_timestamp of rmw_take is 0 when no message is taken.
+            # We replace this 0 with the source_timestamp of preceding record because
+            # typical node which 'take' messages (instead of using subscription callback)
+            # use last message when no message is taken.
+            sub_records = fill_source_timestamp_with_latest_timestamp(sub_records)
         pub_records = self._provider.publish_records(self._node_path.publisher)
 
         columns = [
-            sub_records.columns[0],
+            *sub_records.columns,
             f'{self._node_path.publish_topic_name}/rclcpp_publish_timestamp',
         ]
+        left_key = sub_records.columns[0]
+
+        # Set left_key to rmw_take timestamp
+        # if sub_records are obtained by RecordsProviderLttng.subscription_take_records()
+        if is_take_node:
+            for column in sub_records.columns:
+                if column.endswith(COLUMN_NAME.RMW_TAKE_TIMESTAMP):
+                    columns.remove(column)
+                    left_key = column
+                    break
 
         pub_sub_records = merge_sequential(
             left_records=sub_records,
             right_records=pub_records,
-            left_stamp_key=sub_records.columns[0],
+            left_stamp_key=left_key,
             right_stamp_key=pub_records.columns[0],
             join_left_key=None,
             join_right_key=None,
@@ -1404,6 +1835,12 @@ class FilteredRecordsSource:
             )
             records.drop_columns(['tilde_subscription])
 
+            Columns
+
+            - [topic_name]/tilde_subscribe_timestamp
+            - [topic_name]/tilde_subscription
+            - [topic_name]/tilde_message_id
+
         """
         grouped_records = self._grouped_tilde_sub_records
         if len(grouped_records) == 0:
@@ -1452,6 +1889,13 @@ class FilteredRecordsSource:
                 ]
             )
 
+            columns:
+
+            - callback_start_timestamp
+            - callback_object
+            - is_intra_process
+            - source_timestamp
+
         """
         grouped_records = self._grouped_sub_records
         if len(grouped_records) == 0:
@@ -1495,6 +1939,16 @@ class FilteredRecordsSource:
         Returns
         -------
         RecordsInterface
+            columns:
+
+            - callback_object
+            - callback_start_timestamp
+            - publisher_handle
+            - rclcpp_publish_timestamp
+            - rcl_publish_timestamp (Optional)
+            - dds_write_timestamp (Optional)
+            - message_timestamp
+            - source_timestamp
 
         """
         pub_records = self.publish_records(publisher_handles)
@@ -1560,6 +2014,14 @@ class FilteredRecordsSource:
                           x.get('publisher_handle') in publisher_handles
             )
 
+            columns:
+
+            - callback_object
+            - callback_start_timestamp
+            - publisher_handle
+            - rclcpp_publish_timestamp
+            - message_timestamp
+
 
         """
         grouped_records = self._grouped_intra_comm_records
@@ -1620,8 +2082,6 @@ class FilteredRecordsSource:
         - dds_write_timestamp (Optional)
         - message_timestamp
         - source_timestamp
-        - tilde_publish_timestamp (Optional)
-        - tilde_message_id (Optional)
 
         """
         grouped_records = self._grouped_publish_records
@@ -1738,6 +2198,12 @@ class FilteredRecordsSource:
                 lambda x: x.['callback_object] in [inter_callback_object, intra_callback_object]
             )
 
+        columns:
+
+        - callback_start_timestamp
+        - callback_end_timestamp
+        - callback_object
+
         """
         records = self._grouped_callback_records
         callback_records = RecordsFactory.create_instance(
@@ -1846,6 +2312,12 @@ class FilteredRecordsSource:
     def _grouped_sub_records(self) -> dict[int, RecordsInterface]:
         records = self._lttng.compose_subscribe_records()
         group = records.groupby([COLUMN_NAME.CALLBACK_OBJECT])
+        return self._expand_key_tuple(group)
+
+    @cached_property
+    def _grouped_rmw_take_records(self) -> dict[int, RecordsInterface]:
+        records = self._lttng.compose_rmw_take_records()
+        group = records.groupby([COLUMN_NAME.RMW_SUBSCRIPTION_HANDLE])
         return self._expand_key_tuple(group)
 
     @cached_property

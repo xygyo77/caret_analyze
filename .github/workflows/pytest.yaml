@@ -11,7 +11,7 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
-    container: ghcr.io/autowarefoundation/autoware-openadk:latest-prebuilt
+    container: ghcr.io/autowarefoundation/autoware:latest-devel
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -32,7 +32,12 @@ jobs:
           rosdep update
           rosdep install -i --skip-keys "caret_analyze_cpp_impl" --from-paths . -y --rosdistro humble
       - name: Install dependent packages
-        run: python3 -m pip install -r src/requirements.txt
+        run: |
+          python3 -m pip install -r src/requirements.txt
+          # cSpell:ignore typeguard
+          if dpkg -l | grep -q python3-typeguard; then
+            sudo apt remove -y python3-typeguard
+          fi
 
       - name: Get package list
         run: |
