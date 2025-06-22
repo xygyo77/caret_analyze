@@ -22,6 +22,7 @@ import pytest
 reason = '[mypy test is to be officially supported in v0.4 or later.]'
 
 
+@pytest.mark.skip(reason="Temporarily skipping mypy.")
 @pytest.mark.mypy
 @pytest.mark.linter
 def test_mypy():

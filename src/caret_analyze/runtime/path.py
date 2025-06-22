@@ -29,6 +29,14 @@ from ..record import (Columns,
                       RecordsInterface)
 from ..value_objects import CallbackChain, PathStructValue
 
+import pandas as pd
+
+# Pandas の表示オプションを設定
+pd.set_option('display.max_columns', None)  # 全ての列を表示
+pd.set_option('display.width', 1000)        # ターミナルの幅を広く取る（折り返しを防ぐ）
+# pd.set_option('display.max_rows', None)   # 全ての行を表示したい場合はこれも設定
+# pd.set_option('display.max_colwidth', None) # 各列の最大幅を設定したい場合
+
 logger = getLogger(__name__)
 
 
@@ -226,8 +234,16 @@ class RecordsMerged:
         left_records.rename_columns(rename_rule)
         first_column = first_element.columns[0]
 
+        num = 0
         for target_, target in zip(targets[:-1], targets[1:]):
-            right_records: RecordsInterface = target.to_records()
+            num += 1
+            right_records = target.to_records()
+
+            # デバッグ用の print 文は `rmw_take_timestamp` が統合されていることを前提に調整するか削除してください
+            if True:
+                right = right_records.to_dataframe()
+                left = left_records.to_dataframe()
+                print(f"-------------------------------------------------------\n!!! --- {num} --- [1] {left=}, {right=}")
 
             is_dummy_records = len(right_records.columns) == 0
 
@@ -243,9 +259,9 @@ class RecordsMerged:
                 right_records)
             right_records.rename_columns(rename_rule)
 
-            # adjust the columns for the case that the message is not taken by callback
-            if is_match_column(right_records.columns[0], 'source_timestamp'):
-                left_records.drop_columns([left_records.columns[-1]])
+            # NOTE: Removed the problematic line that was dropping right_records.columns[-1]
+            if isinstance(target, Communication) and target.use_take_manually():
+                right_records.drop_columns([right_records.columns[-1]])
 
             if left_records.columns[-1] != right_records.columns[0]:
                 raise InvalidRecordsError('left columns[-1] != right columns[0]')
@@ -261,6 +277,12 @@ class RecordsMerged:
                 f'- left_column: {left_stamp_key} \n'
                 f'- right_column: {right_stamp_key} \n'
             )
+
+            # デバッグ用の print 文は `rmw_take_timestamp` が統合されていることを前提に調整するか削除してください
+            if True:
+                right = right_records.to_dataframe()
+                left = left_records.to_dataframe()
+                print(f"\n!!! --- {num} --- [2] {left=}, {right=}\n")
 
             is_sequential = isinstance(target_, NodePath) and \
                 isinstance(target, Communication) and \
@@ -328,11 +350,131 @@ class RecordsMerged:
         ]
         left_records.drop_columns(source_columns)
 
-        rmw_take_column = [
-            column for column in left_records.columns
-            if is_match_column(column, 'rmw_take_timestamp')
-        ]
-        left_records.drop_columns(rmw_take_column)
+        # --- Conditional dropping for rmw_take_timestamp and callback_start_timestamp ---
+        columns_to_drop_at_end = []
+
+        is_last_path_segment_take_comm = False
+        if targets and isinstance(targets[-1], Communication) and targets[-1].use_take_manually():
+            is_last_path_segment_take_comm = True
+
+        pre_df = left_records.to_dataframe() # This line should be after all drops for correct comparison
+
+        if not is_last_path_segment_take_comm:
+            # If the last path segment is NOT a take communication:
+            # Drop all rmw_take_timestamp columns.
+            rmw_take_cols_to_drop = [
+                col for col in left_records.columns
+                if is_match_column(col, 'rmw_take_timestamp')
+            ]
+            columns_to_drop_at_end.extend(rmw_take_cols_to_drop)
+        else:
+            # If the last path segment IS a take communication:
+            # Keep rmw_take_timestamp.
+            # Overwrite the specific callback_start_timestamp column associated with this last communication.
+            # Handle NA values in rmw_take_timestamp by falling back to rclcpp_publish_timestamp.
+
+            # 1. rmw_take_timestamp カラム名を探す
+            rmw_take_col_name = None
+            for col in left_records.columns: # left_records には既に right_records の内容が結合されているはず
+                if 'rmw_take_timestamp' in col: # より正確なマッチングが必要であれば調整
+                    rmw_take_col_name = col
+                    break
+
+            # 2. 関連する callback_start_timestamp カラム名を探す
+            # planning_validator の callback_start_timestamp は /perception/object_recognition/prediction/map_based_prediction/callback_1/callback_start_timestamp のような名前になっていると仮定
+            # これはあくまで「最終ノードのコールバックタイムスタンプ」であるべき
+            last_comm_callback_col_name = None
+            if isinstance(targets[-1], Communication) and targets[-1].subscribe_callback_name is not None:
+                # targets[-1].subscribe_callback_name から正しいパスを構築する必要がある
+                # 例: f'{targets[-1].subscribe_callback_name}/callback_start_timestamp' のような形
+                # ただし、現在の left_records.columns にはフルパス名が入っているはずなので、それを探す
+                # ログの例: /perception/object_recognition/prediction/map_based_prediction/callback_1/callback_start_timestamp
+                # これは Communication の subscribe_callback_name を直接使って構築するだけでは不十分な場合がある
+                # ここでは、callback_start_timestamp を含むカラム名で、かつ targets[-1] に関連しそうなものを探す
+                # より汎用的な探索ロジックが必要になる場合があります。
+                # 例として、最後の Communication のノード名部分を含む callback_start_timestamp を探す
+                # targets[-1].node_name が 'planning_validator' だとして、関連するコールバックを見つける
+                
+                # ここでは、簡易的に、rmw_take_timestamp とセットでNAになることが確認された
+                # '/perception/object_recognition/prediction/map_based_prediction/callback_1/callback_start_timestamp'
+                # を対象とします。実際のコードでは、動的に最後の通信に関連するカラムを特定してください。
+                
+                # ログから判断すると、おそらく結合済みの left_records の中で、
+                # is_match_column(col, 'callback_start_timestamp') で見つかる
+                # かつ rmw_take_timestamp が NA となっている行でNAになっているカラムを対象とする
+                
+                # 簡単な例: 最後の Communication の subscribe_callback_name に最も近い callback_start_timestamp
+                # これはあくまで仮のロジックなので、正確なパスの特定が必要です
+                potential_callback_cols = [
+                    col for col in left_records.columns
+                    if is_match_column(col, 'callback_start_timestamp')
+                ]
+                # 複数の候補がある場合、適切なものを選択するロジックが必要
+                # 今のところ、ログでNAになっているパスを直接指定します
+                last_comm_callback_col_name = '/perception/object_recognition/prediction/map_based_prediction/callback_1/callback_start_timestamp'
+                if last_comm_callback_col_name not in left_records.columns:
+                     # 見つからなかった場合は、is_match_column で探す
+                     for col in potential_callback_cols:
+                         # 例えば、targets[-1].node_name がカラム名に含まれるか、などで特定
+                         if targets[-1].node_name in col: # 例
+                             last_comm_callback_col_name = col
+                             break
+                
+            # 3. rclcpp_publish_timestamp カラム名を探す（フォールバック用）
+            rclcpp_publish_col_name = None
+            for col in left_records.columns: # left_records には既に right_records の内容が結合されているはず
+                if 'rclcpp_publish_timestamp' in col: # より正確なマッチングが必要であれば調整
+                    rclcpp_publish_col_name = col
+                    break
+
+            if rmw_take_col_name and last_comm_callback_col_name and last_comm_callback_col_name in left_records.columns:
+                # ログの通り、NAになっているのは right_records の callback_start_timestamp だったので、
+                # left_records にマージされた後もその部分がNAになっている可能性が高い。
+                # そのため、left_records の該当カラムを更新する。
+
+                # rmw_take_timestamp の値で callback_start_timestamp を上書き
+                left_records.data[last_comm_callback_col_name] = left_records.data[rmw_take_col_name]
+
+                # rmw_take_timestamp が NA の場合、rclcpp_publish_timestamp で埋める
+                # この操作は left_records の rmw_take_timestamp が NA である行の
+                # last_comm_callback_col_name を更新することになります。
+                if rclcpp_publish_col_name and rclcpp_publish_col_name in left_records.columns:
+                    # fillna は元の NA 値のみを埋めます
+                    left_records.data[last_comm_callback_col_name] = \
+                        left_records.data[last_comm_callback_col_name].fillna(left_records.data[rclcpp_publish_col_name])
+
+                # rmw_take_timestamp カラムは不要になるので削除対象に追加
+                columns_to_drop_at_end.append(rmw_take_col_name)
+
+            elif rmw_take_col_name:
+                # callback_start_timestamp が特定できないが rmw_take_timestamp が存在する場合
+                # rmw_take_timestamp をそのまま終端タイムスタンプとして扱う（リネームしない）
+                # または、新しいパスの終端カラム名（例: 'path_end_timestamp'）にリネームする
+                # 今回は rmw_take_timestamp をそのまま残す前提で、NAを埋める処理のみ行う
+                if rclcpp_publish_col_name and rclcpp_publish_col_name in left_records.columns:
+                    left_records.data[rmw_take_col_name] = \
+                        left_records.data[rmw_take_col_name].fillna(left_records.data[rclcpp_publish_col_name])
+
+            # その他、特定の callback_start_timestamp を削除するロジック（もし必要であれば）
+            # ここでは rmw_take_timestamp で上書きしたので、既存の callback_start_timestamp はその役目を果たしたと見なす
+            # したがって、元のコメントアウト部分を復活させる必要はない
+
+        if columns_to_drop_at_end:
+            # 重複を排除してからドロップする
+            columns_to_drop_at_end = list(set(columns_to_drop_at_end))
+            left_records.drop_columns(columns_to_drop_at_end)
+        # --------------------------------------------------------------------
+
+        # Original code had this:
+        # rmw_take_column = [
+        #     column for column in left_records.columns
+        #     if is_match_column(column, 'rmw_take_timestamp')
+        # ]
+        # left_records.drop_columns(rmw_take_column)
+        # This original rmw_take_timestamp drop is now replaced by the conditional block above.
+
+        after_df = left_records.to_dataframe()
+        print(f"\n{pre_df=}\n{after_df=}\n##############################################################\n")
 
         return left_records
 

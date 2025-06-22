@@ -396,14 +396,16 @@ class RecordsSource():
             ).column_names,
             how='left',
         )
+        print(f"!!! [1] {rmw_sub_records.to_dataframe()=}")
         rmw_sub_records.drop_columns(
             [
-                COLUMN_NAME.RMW_TAKE_TIMESTAMP,
+                ### COLUMN_NAME.RMW_TAKE_TIMESTAMP,
                 COLUMN_NAME.TID,
                 COLUMN_NAME.MESSAGE,
                 COLUMN_NAME.RMW_SUBSCRIPTION_HANDLE,
             ]
         )
+        print(f"!!! [2] droped {rmw_sub_records.to_dataframe()=}")
 
         inter_proc_subscribe = RecordsFactory.create_instance(
             None,
@@ -412,10 +414,15 @@ class RecordsSource():
                 ColumnValue(COLUMN_NAME.CALLBACK_OBJECT),
                 ColumnValue(COLUMN_NAME.IS_INTRA_PROCESS),
                 ColumnValue(COLUMN_NAME.SOURCE_TIMESTAMP),
+                ColumnValue(COLUMN_NAME.RMW_TAKE_TIMESTAMP),
+                ColumnValue(COLUMN_NAME.CALLBACK_NAME),
             ]
         )
+        print(f"!!! [3] create {inter_proc_subscribe.to_dataframe()=}")
         inter_proc_subscribe.concat(dispatch_sub_records)
+        print(f"!!! [4] concat {inter_proc_subscribe.to_dataframe()=}")
         inter_proc_subscribe.concat(rmw_sub_records)
+        print(f"!!! [5] concat {inter_proc_subscribe.to_dataframe()=}")
 
         intra_proc_subscribe = self.intra_callback_records
 
@@ -431,6 +438,7 @@ class RecordsSource():
             ).column_names,
             how='outer',
         )
+        print(f"!!! [6] intra merged {subscribe.to_dataframe()=}")
 
         return subscribe
 
