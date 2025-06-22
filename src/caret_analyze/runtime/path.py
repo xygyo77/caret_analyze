@@ -259,7 +259,7 @@ class RecordsMerged:
                 right_records)
             right_records.rename_columns(rename_rule)
 
-            # NOTE: Removed the problematic line that was dropping right_records.columns[-1]
+            # adjust the columns for the case that the message is not taken by callback
             if isinstance(target, Communication) and target.use_take_manually():
                 right_records.drop_columns([right_records.columns[-1]])
 
