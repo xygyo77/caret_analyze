@@ -982,21 +982,126 @@ class RecordsProviderLttng(RuntimeDataProvider):
 
         records = self._source.inter_take_comm_records(publisher_handles, rmw_handle)
 
+        print(f"### DEBUG(_compose): Received records ID: {id(records)}")
+        print(f"### DEBUG(_compose): Received records columns: {records.columns}")
+        try:
+            print(f"### DEBUG(_compose): Received records num_rows: {len(records.data)}")
+            # if len(records.data) > 0:
+            #     print(f"### DEBUG(_compose): First received record data: {records.data[0].get_data()}")
+        except Exception as e:
+            print(f"### DEBUG(_compose): Received records data access failed: {e}")
+
+        # records.columns への単純なアクセスは既に有効なので、そのまま残します
+        try:
+            current_columns = records.columns
+            print(f"### DEBUG(_compose): Successfully accessed records.columns: {current_columns}")
+        except Exception as e:
+            print(f"### DEBUG(_compose) ERROR: Failed to access records.columns: {e}")
+            raise
+
+        # --- ここから COLUMN_NAME.CALLBACK_START_TIMESTAMP カラムを追加するコード ---
+
+        print("--- 1 ---")
+        try:
+            num_rows = len(records.data)
+            print(f"### DEBUG(_compose): Retrieved num_rows: {num_rows}")
+        except AttributeError:
+            print(f"!!! WARNING: records.data is not accessible or not an iterable. Assuming 0 rows.")
+            num_rows = 0
+        print("--- 2 ---")
+
+        empty_uint64_values = [0] * num_rows
+        print(f"### DEBUG(_compose): Created empty_uint64_values of length: {len(empty_uint64_values)}")
+        print("--- 3 ---")
+
+        # 追加するカラムの名前を文字列として取得
+        column_name_str = COLUMN_NAME.CALLBACK_START_TIMESTAMP
+        print(f"### DEBUG: Column name string: '{column_name_str}'. Type: {type(column_name_str)}")
+
+        print(f"### DEBUG: Checking if column '{column_name_str}' already exists in records.columns...")
+        if column_name_str not in records.columns:
+            print(f"### Adding empty column: {column_name_str}")
+            try:
+                # ここを修正：ColumnValue オブジェクトを生成して渡す
+                column_value_object_to_pass = ColumnValue(column_name_str)
+                print(f"### DEBUG: Created ColumnValue object: {column_value_object_to_pass} of type {type(column_value_object_to_pass)}")
+                records.append_column(column_value_object_to_pass, empty_uint64_values)
+                print(f"### DEBUG: Column '{column_name_str}' appended successfully using ColumnValue object.")
+
+            except Exception as e:
+                print(f"!!! ERROR: Failed to append column '{column_name_str}': {e}")
+                raise
+        else:
+            print(f"### Column {column_name_str} already exists. Skipping append.")
+
+        # --- rmw_take_timestamp の内容を callback_start_timestamp にコピーするロジック ---
+        print(f"### DEBUG: Attempting to copy '{COLUMN_NAME.RMW_TAKE_TIMESTAMP}' to '{COLUMN_NAME.CALLBACK_START_TIMESTAMP}'")
+        try:
+            # 1. rmw_take_timestamp カラムのデータを取得 (None を含む可能性がある)
+            rmw_take_raw_values = records.get_column_series(COLUMN_NAME.RMW_TAKE_TIMESTAMP)
+            print(f"### DEBUG: Retrieved {len(rmw_take_raw_values)} values from '{COLUMN_NAME.RMW_TAKE_TIMESTAMP}'. Type: {type(rmw_take_raw_values)}")
+
+            # 2. リストに含まれる None を uint64_t に変換可能な値 (例: 0) に置き換える
+            # C++ の uint64_t には None は渡せないため
+            # ここが重要な修正点
+            rmw_take_values_for_cpp = [v if v is not None else 0 for v in rmw_take_raw_values]
+            print(f"### DEBUG: Converted {len([v for v in rmw_take_raw_values if v is None])} None values to 0 for C++ transfer.")
+
+            # 3. 既存の 'callback_start_timestamp' カラムを削除（空で追加済みのため）
+            if COLUMN_NAME.CALLBACK_START_TIMESTAMP in records.columns:
+                print(f"### DEBUG: Dropping existing empty column: {COLUMN_NAME.CALLBACK_START_TIMESTAMP}")
+                records.drop_columns([COLUMN_NAME.CALLBACK_START_TIMESTAMP])
+            else:
+                # このパスは通常通らないはずだが、念のため
+                print(f"### DEBUG: Column '{COLUMN_NAME.CALLBACK_START_TIMESTAMP}' not found for dropping. (Expected to be present)")
+
+            # 4. rmw_take_values_for_cpp を使って 'callback_start_timestamp' カラムを再度追加
+            # Python 側の RecordsCppImpl.append_column は ColumnValue オブジェクトを期待
+            callback_start_column_value_for_copy = ColumnValue(COLUMN_NAME.CALLBACK_START_TIMESTAMP)
+            records.append_column(callback_start_column_value_for_copy, rmw_take_values_for_cpp)
+
+            print(f"### DEBUG: Successfully copied '{COLUMN_NAME.RMW_TAKE_TIMESTAMP}' to '{COLUMN_NAME.CALLBACK_START_TIMESTAMP}'.")
+
+        except Exception as e:
+            print(f"!!! ERROR: Failed to copy '{COLUMN_NAME.RMW_TAKE_TIMESTAMP}' to '{COLUMN_NAME.CALLBACK_START_TIMESTAMP}': {e}")
+            raise # エラーが発生した場合は再スロー
+
+        # --- コピーロジックここまで ---
+
+
+
+        # カラムリスト構築のロジック (既存)
+        print("### DEBUG(_compose): Testing column list construction...")
         columns = [COLUMN_NAME.RCLCPP_PUBLISH_TIMESTAMP]
-        if COLUMN_NAME.RCL_PUBLISH_TIMESTAMP in records.columns:
-            columns.append(COLUMN_NAME.RCL_PUBLISH_TIMESTAMP)
-        if COLUMN_NAME.DDS_WRITE_TIMESTAMP in records.columns:
-            columns.append(COLUMN_NAME.DDS_WRITE_TIMESTAMP)
-        columns += [
-            COLUMN_NAME.SOURCE_TIMESTAMP,
-            COLUMN_NAME.RMW_TAKE_TIMESTAMP,
-            # COLUMN_NAME.CALLBACK_START_TIMESTAMP,
-        ]
+        try:
+            print(f"### DEBUG(_compose): Added RCLCPP_PUBLISH_TIMESTAMP: {columns}")
+            if COLUMN_NAME.RCL_PUBLISH_TIMESTAMP in records.columns:
+                columns.append(COLUMN_NAME.RCL_PUBLISH_TIMESTAMP)
+            print(f"### DEBUG(_compose): Checked RCL_PUBLISH_TIMESTAMP: {columns}")
+            if COLUMN_NAME.DDS_WRITE_TIMESTAMP in records.columns:
+                columns.append(COLUMN_NAME.DDS_WRITE_TIMESTAMP)
+            print(f"### DEBUG(_compose): Checked DDS_WRITE_TIMESTAMP: {columns}")
+            columns += [
+                COLUMN_NAME.SOURCE_TIMESTAMP,
+                COLUMN_NAME.RMW_TAKE_TIMESTAMP,
+                # ここは文字列として追加するままでOK
+                COLUMN_NAME.CALLBACK_START_TIMESTAMP,
+            ]
+            print(f"### DEBUG(_compose): Final constructed 'columns' list: {columns}")
+        except Exception as e:
+            print(f"### DEBUG(_compose) ERROR: Column list construction failed: {e}")
+            raise
 
+
+        # _format および _rename_column の呼び出し (既存)
+        print(f"### DEBUG(_compose): About to call _format with columns: {columns}")
         self._format(records, columns)
+        print(f"### DEBUG(_compose): _format finished successfully.")
 
+        print(f"### DEBUG(_compose): About to call _rename_column...")
         self._rename_column(records, comm_value.subscribe_callback_name,
                             comm_value.topic_name, None)
+        print(f"### DEBUG(_compose): _rename_column finished successfully.")
 
         return records
 
@@ -1836,6 +1941,19 @@ class FilteredRecordsSource:
         # NOTE: After merge, the dropped data are aligned at the end
         # regardless of the time of publish.
         merged.sort(COLUMN_NAME.RCLCPP_PUBLISH_TIMESTAMP)
+
+        print(f"### DEBUG(inter_take): Merged object ID: {id(merged)}")
+        print(f"### DEBUG(inter_take): Merged columns: {merged.columns}")
+        try:
+            # 実際にデータが取得できるか、行数はいくつかを確認
+            data_len = len(merged.data)
+            print(f"### DEBUG(inter_take): Merged num_rows: {data_len}")
+            # もしデータがあるなら、最初の数行を出力してみる
+            # 例えば、Recordオブジェクトのリストが返るなら
+            # if data_len > 0:
+            #     print(f"### DEBUG(inter_take): First record data: {merged.data[0].get_data()}")
+        except Exception as e:
+            print(f"### DEBUG(inter_take): Merged data access failed: {e}")
 
         return merged
 
