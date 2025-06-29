@@ -188,7 +188,9 @@ class RecordsMerged:
         # targets が空でないことを確認してからアクセス
         remain_last = []
         remain_first = []
-
+        
+        take_records_applied_for_last_communication: bool = False
+        
         # Loop over targets for merging if there's more than one target
         if len(targets) > 1:
             for target_, target in zip(targets[:-1], targets[1:]):
@@ -219,6 +221,7 @@ class RecordsMerged:
                         print("!!! Applying right_records = target.to_take_records() for the identified last Communication target")
                         try:
                             right_records = target.to_take_records()
+                            take_records_applied_for_last_communication = True
                         except Exception as e:
                             msg = f"Failed to get take records for the last Communication target: {e}"
                             print(msg)
@@ -409,60 +412,78 @@ class RecordsMerged:
 
         left_records.drop_columns(rmw_take_column)
 
-        # --- ここからが追加するフィルタリングロジック ---
-        # 0 または NA を含むレコード（行）を除外
-        # 例: '/planning/planning_validator/callback_6/callback_start_timestamp/0'
-        # このカラムの値が None（NA）または 0 のレコードを削除する。
-        def filter_invalid_records(record: RecordInterface) -> bool:
-            # フィルタリング対象のカラム名をここに記述します。
-            # 複数指定する場合はリストに追加してください。
-            columns_to_check = [
-                '/planning/planning_validator/callback_6/callback_start_timestamp/0',
-                # 必要に応じて他のカラムを追加
+        ############################################
+        ### **行レベルフィルタリング (0 または NA 値)**
+
+        if left_records.data:
+            logger.info("Applying row-level filtering to remove records with 0 or NA in any applicable column.")
+            
+            # フィルタリング対象の部分文字列を定義
+            # このリストに含まれる文字列がカラム名の一部として存在する場合にチェックします。
+            TARGET_SUBSTRINGS = [
+                'rclcpp_publish_timestamp',
+                'callback_start_timestamp',
+                'rmw_take_timestamp'
             ]
 
-            for col_name in columns_to_check:
-                if col_name in record.columns: # レコードにそのカラムが存在するか確認
-                    value = record.get(col_name)
-                    # 値が None（NA）または 0 であれば、そのレコードは無効と判断し、削除対象とする
-                    if value is None or value == 0:
-                        logger.debug(f"Filtering out record due to {col_name}={value}")
-                        return False # False を返すとそのレコードは削除される
-            return True # すべてのチェックを通過したレコードは保持する
+            def filter_func(record: RecordInterface) -> bool:
+                # このレコードが実際に持っている全てのリカラム名を取得します。
+                # RecordInterface.columns は set[str] を返します。
+                for col_name in record.columns: 
+                    # カラム名がTARGET_SUBSTRINGSのいずれかを含むかチェックします。
+                    is_relevant_column = any(
+                        substring in col_name for substring in TARGET_SUBSTRINGS
+                    )
 
-        # filter_if を呼び出してレコードをフィルタリング
-        # left_records は RecordsInterface のインスタンスなので filter_if メソッドを持っているはずです。
-        if left_records.data: # データが存在する場合のみフィルタリングを実行
-            logger.info("Applying row-level filtering to remove records with 0 or NA in specified columns.")
-            left_records.filter_if(filter_invalid_records)
+                    if not is_relevant_column:
+                        continue # 関係ないカラムであればスキップします。
+
+                    # record.get() メソッドを使用して値を取得します。
+                    # RecordInterfaceの定義に基づき、get()はintを返すとされています。
+                    # しかし、もし値が存在しない場合にget()が0を返すのであれば、
+                    # Noneチェックは不要になる可能性がありますが、安全のため残しておきます。
+                    value = record.get(col_name) 
+                    
+                    # 値が0であれば、そのレコードは無効と判断し、削除対象とします。
+                    # `value is None` のチェックは、get()がNoneを返さない前提であれば、
+                    # ここでは主に論理的な完全性を保つために残します。
+                    if value == 0 or value is None: 
+                        logger.debug(f"Filtering out record due to {col_name}={value} (column: {col_name}, record: {record.data})")
+                        return False # False を返すとそのレコードは削除されます。
+                return True # すべてのチェックを通過したレコードは保持されます。
+
+            left_records.filter_if(filter_func)
+            
+            initial_row_count = len(first_element.data) if 'first_element' in locals() else 0
+            if len(left_records.data) < initial_row_count:
+                 logger.info(f"Removed {initial_row_count - len(left_records.data)} rows due to 0 or NA values in applicable columns.")
+            else:
+                 logger.info("No rows removed based on 0 or NA values in applicable columns.")
+
         else:
             logger.info("No data in left_records to apply row-level filtering.")
 
+        ### **列レベルフィルタリング (すべて 0 またはすべて NA)**
 
-        # 0 または NA が多い（あるいは全てがそうである）カラム（列）を除外
         columns_to_drop_by_content = []
-        if left_records.data: # データが存在する場合のみ DataFrame 変換とカラムチェックを実行
+        if left_records.data:
             try:
+                # to_dataframe() は RecordsInterface のメソッドとして存在し、
+                # これは内部データに基づいてDataFrameを生成すると想定されます。
                 df_temp = left_records.to_dataframe()
 
                 for col in df_temp.columns:
-                    # 例: カラムが全てNAの場合に削除
                     if df_temp[col].isna().all():
                         columns_to_drop_by_content.append(col)
-                    # 例: カラムが全て0の場合に削除 (数値型のみを対象)
-                    # pd.api.types.is_numeric_dtype で数値型であることを確認
                     elif pd.api.types.is_numeric_dtype(df_temp[col]) and (df_temp[col] == 0).all():
                         columns_to_drop_by_content.append(col)
-                    # 例: NAが90%以上の場合に削除（閾値は調整可能）
-                    # elif len(df_temp[col]) > 0 and df_temp[col].isna().sum() / len(df_temp) > 0.9:
-                    #     columns_to_drop_by_content.append(col)
                     
                 if columns_to_drop_by_content:
-                    # 重複を排除してdrop_columnsを呼び出す
-                    logger.info(f"Applying column-level filtering: Dropping columns: {list(set(columns_to_drop_by_content))}")
-                    left_records.drop_columns(list(set(columns_to_drop_by_content)))
+                    unique_cols_to_drop = list(set(columns_to_drop_by_content))
+                    logger.info(f"Applying column-level filtering: Dropping columns: {unique_cols_to_drop}")
+                    left_records.drop_columns(unique_cols_to_drop)
                 else:
-                    logger.info("No columns identified for dropping based on 0 or NA content.")
+                    logger.info("No columns identified for dropping based on all 0 or all NA content.")
 
             except Exception as e:
                 logger.error(f"Error during column-level filtering: {e}")
@@ -470,6 +491,60 @@ class RecordsMerged:
             logger.info("No data in left_records to apply column-level filtering.")
 
         # --- フィルタリングロジックここまで ---
+        ############################################
+
+        # ここにリネーム処理を追加
+        if take_records_applied_for_last_communication:
+            logger.info("Renaming callback_start_timestamp to rmw_take_timestamp for the last communication's take records.")
+            
+            # left_records.columns はリスト（またはリストのようなもの）なので、逆順にイテレートする
+            # また、カラム名が Communication の node_name/callback_start_timestamp/0 のようになるので、
+            # is_match_column を使ってターゲットとなるカラムを特定するのが良いでしょう。
+            
+            # まず、対象となるCommunicationのノード名を取得
+            # last_communication_in_full_list が存在する前提
+            comm_node_name = last_communication_in_full_list.node_name if hasattr(last_communication_in_full_list, 'node_name') else \
+                             last_communication_in_full_list.subscribe_node_name if hasattr(last_communication_in_full_list, 'subscribe_node_name') else None
+            
+            if comm_node_name:
+                target_column_suffix = f"{comm_node_name}/callback_start_timestamp" # サフィックスも考慮
+                
+                # left_records.columns を逆順に検索
+                column_to_rename = None
+                for col_name in reversed(left_records.columns):
+                    # 例えば、"/planning/planning_validator/callback_6/callback_start_timestamp/0"
+                    # のようなカラム名が期待される
+                    if target_column_suffix in col_name and col_name.startswith(f"/{comm_node_name}/"): # より厳密なチェック
+                        column_to_rename = col_name
+                        break
+                
+                if column_to_rename:
+                    # 新しいカラム名を生成
+                    # 例: /planning/planning_validator/rmw_take_timestamp/0
+                    # 注意: サフィックス（/0など）を保持する必要がある
+                    parts = column_to_rename.rsplit('/', 1) # 最後の '/' で分割
+                    if len(parts) > 1:
+                        # parts[0]は '/planning/planning_validator/callback_6/callback_start_timestamp'
+                        # parts[1]は '0'
+                        new_column_name = parts[0].replace("callback_start_timestamp", "rmw_take_timestamp") + "/" + parts[1]
+                    else:
+                        # サフィックスがない場合（想定外だが念のため）
+                        new_column_name = column_to_rename.replace("callback_start_timestamp", "rmw_take_timestamp")
+
+                    if column_to_rename != new_column_name:
+                        left_records.rename_columns({column_to_rename: new_column_name})
+                        logger.info(f"Successfully renamed column '{column_to_rename}' to '{new_column_name}'.")
+                    else:
+                        logger.warning(f"Column '{column_to_rename}' already has the target name or replacement failed.")
+                else:
+                    logger.warning(f"Could not find a 'callback_start_timestamp' column for last communication '{comm_node_name}' to rename.")
+            else:
+                logger.warning("Could not determine node name for last communication to apply rename logic.")
+
+
+        print("--- [DONE] ---")
+        print(f"{left_records.to_dataframe()=}")
+        print("-----------------------------------------------------")
 
         return left_records
 
