@@ -186,8 +186,8 @@ class RecordsMerged:
         print("!!! 1")
         # Initialize remain_last and remain_first to avoid UnboundLocalError
         # targets が空でないことを確認してからアクセス
-        remain_last: Union[Any, None] = targets[0] if targets else None
-        remain_first: Union[Any, None] = targets[0] if targets else None
+        remain_last = []
+        remain_first = []
 
         # Loop over targets for merging if there's more than one target
         if len(targets) > 1:
