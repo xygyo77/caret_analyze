@@ -494,52 +494,52 @@ class RecordsMerged:
         ############################################
 
         # ここにリネーム処理を追加
+        print(f"!!! {take_records_applied_for_last_communication=}")
         if take_records_applied_for_last_communication:
-            logger.info("Renaming callback_start_timestamp to rmw_take_timestamp for the last communication's take records.")
+            logger.info("Attempting to rename callback_start_timestamp to rmw_take_timestamp for the last communication's take records.")
             
-            # left_records.columns はリスト（またはリストのようなもの）なので、逆順にイテレートする
-            # また、カラム名が Communication の node_name/callback_start_timestamp/0 のようになるので、
-            # is_match_column を使ってターゲットとなるカラムを特定するのが良いでしょう。
-            
-            # まず、対象となるCommunicationのノード名を取得
-            # last_communication_in_full_list が存在する前提
-            comm_node_name = last_communication_in_full_list.node_name if hasattr(last_communication_in_full_list, 'node_name') else \
-                             last_communication_in_full_list.subscribe_node_name if hasattr(last_communication_in_full_list, 'subscribe_node_name') else None
-            
-            if comm_node_name:
-                target_column_suffix = f"{comm_node_name}/callback_start_timestamp" # サフィックスも考慮
-                
-                # left_records.columns を逆順に検索
-                column_to_rename = None
-                for col_name in reversed(left_records.columns):
-                    # 例えば、"/planning/planning_validator/callback_6/callback_start_timestamp/0"
-                    # のようなカラム名が期待される
-                    if target_column_suffix in col_name and col_name.startswith(f"/{comm_node_name}/"): # より厳密なチェック
-                        column_to_rename = col_name
-                        break
-                
-                if column_to_rename:
-                    # 新しいカラム名を生成
-                    # 例: /planning/planning_validator/rmw_take_timestamp/0
-                    # 注意: サフィックス（/0など）を保持する必要がある
-                    parts = column_to_rename.rsplit('/', 1) # 最後の '/' で分割
-                    if len(parts) > 1:
-                        # parts[0]は '/planning/planning_validator/callback_6/callback_start_timestamp'
-                        # parts[1]は '0'
-                        new_column_name = parts[0].replace("callback_start_timestamp", "rmw_take_timestamp") + "/" + parts[1]
-                    else:
-                        # サフィックスがない場合（想定外だが念のため）
-                        new_column_name = column_to_rename.replace("callback_start_timestamp", "rmw_take_timestamp")
-
-                    if column_to_rename != new_column_name:
-                        left_records.rename_columns({column_to_rename: new_column_name})
-                        logger.info(f"Successfully renamed column '{column_to_rename}' to '{new_column_name}'.")
-                    else:
-                        logger.warning(f"Column '{column_to_rename}' already has the target name or replacement failed.")
+            # left_records.columns を逆順に検索
+            column_to_rename = None
+            for col_name in reversed(left_records.columns):
+                # 例えば、"/planning/planning_validator/callback_6/callback_start_timestamp/0"
+                # または "callback_start_timestamp" のようなカラム名が期待される
+                # endswith('callback_start_timestamp') は末尾の /0 などを考慮できないため、
+                # rfind で最後の / を探し、その前の部分で判断する。
+                last_slash_idx = col_name.rfind('/')
+                if last_slash_idx != -1:
+                    # 例: "/planning/planning_validator/callback_6/callback_start_timestamp/0" -> "/planning/planning_validator/callback_6/callback_start_timestamp"
+                    name_without_suffix = col_name[:last_slash_idx]
+                    suffix_part = col_name[last_slash_idx:] # 例: "/0"
                 else:
-                    logger.warning(f"Could not find a 'callback_start_timestamp' column for last communication '{comm_node_name}' to rename.")
+                    # サフィックスがない場合 (例: "callback_start_timestamp")
+                    name_without_suffix = col_name
+                    suffix_part = ""
+
+                if name_without_suffix.endswith('callback_start_timestamp'):
+                    column_to_rename = col_name
+                    break
+            
+            print(f"!!! Find column to rename: {column_to_rename}")
+            if column_to_rename:
+                print(f"!!! Found column to rename: {column_to_rename}")
+                
+                # 新しいカラム名を生成
+                # 例: /planning/planning_validator/callback_6/callback_start_timestamp/0
+                # を /planning/planning_validator/rmw_take_timestamp/0 に変更
+                # 'callback_start_timestamp' の部分だけを 'rmw_take_timestamp' に置換
+                new_column_name_base = name_without_suffix.replace("callback_start_timestamp", "rmw_take_timestamp")
+                new_column_name = new_column_name_base + suffix_part
+
+                if column_to_rename != new_column_name:
+                    left_records.rename_columns({column_to_rename: new_column_name})
+                    logger.info(f"Successfully renamed column '{column_to_rename}' to '{new_column_name}'.")
+                    print(f"DEBUG: Column renamed from '{column_to_rename}' to '{new_column_name}'.")
+                else:
+                    logger.warning(f"Column '{column_to_rename}' already has the target name or replacement failed.")
             else:
-                logger.warning("Could not determine node name for last communication to apply rename logic.")
+                logger.warning(f"Could not find a 'callback_start_timestamp' column to rename, even with take_records_applied_for_last_communication flag true.")
+        else:
+            logger.info("Skipping callback_start_timestamp rename as take_records_applied_for_last_communication flag is false.")
 
 
         print("--- [DONE] ---")
