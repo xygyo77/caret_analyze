@@ -975,10 +975,10 @@ class RecordsProviderLttng(RuntimeDataProvider):
                 rmw_handle =\
                     self._srv.get_rmw_subscription_handle_from_callback_object(callback_objects[0])
             except InvalidArgumentError:
-                rmw_handle = None
-
-        if rmw_handle is None:
-            raise Exception
+                raise InvalidArgumentError(
+                    'Failed to get rmw subscription handle from callback object.'
+                    f'callback_object: {callback_objects[0]}'
+                )
 
         records = self._source.inter_take_comm_records(publisher_handles, rmw_handle)
 
@@ -994,7 +994,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
                 records.append_column(column_value_object_to_pass, empty_uint64_values)
             except Exception as e:
                 msg = (f"Failed to append column '{column_name_str}': {e}")
-                raise Exception(msg) from e
+                raise RuntimeError(msg) from e
 
         # copy rmw_take_timestamp to callback_start_timestamp
         try:
@@ -1011,7 +1011,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
 
         except Exception as e:
             msg = f"Failed to copy: {e}"
-            raise Exception(msg) from e
+            raise RuntimeError(msg) from e
 
         columns = [COLUMN_NAME.RCLCPP_PUBLISH_TIMESTAMP]
         try:
@@ -1026,7 +1026,7 @@ class RecordsProviderLttng(RuntimeDataProvider):
             ]
         except Exception as e:
             msg = f"Column list construction failed: {e}"
-            raise Exception(msg) from e
+            raise RuntimeError(msg) from e
 
         self._format(records, columns)
 
