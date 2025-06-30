@@ -159,8 +159,6 @@ class RecordsMerged:
         take_records_applied_for_last_communication: bool = False
         
         for target_, target in zip(targets[:-1], targets[1:]):
-            remain_last = target_
-            remain_first = target
             right_records: RecordsInterface = target.to_records()
 
             is_dummy_records = len(right_records.columns) == 0
