@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from logging import getLogger
-import pandas as pd
 import re
 
 from .callback import CallbackBase
@@ -157,10 +156,6 @@ class RecordsMerged:
                 last_communication_in_full_list = item
                 break
 
-        # Initialize remain_last and remain_first to avoid UnboundLocalError
-        remain_last = []
-        remain_first = []
-        
         take_records_applied_for_last_communication: bool = False
         
         for target_, target in zip(targets[:-1], targets[1:]):
@@ -199,7 +194,7 @@ class RecordsMerged:
             right_records.rename_columns(rename_rule)
 
             if left_records.columns[-1] != right_records.columns[0]:
-                raise InvalidRecordsError('left columns[-1] != right columns[0]')
+                raise InvalidRecordsError(f'{left_records.columns[-1]=} != {right_records.columns[0]=}')
 
             if left_records.columns[0] in right_records.columns:
                 right_records.drop_columns([left_records.columns[0]])
@@ -246,13 +241,6 @@ class RecordsMerged:
                     how='left'
                 )
 
-        # Check if targets list is empty before accessing remain_last/first
-        if targets:
-            print(f"DEBUG: [merge_records] -- {type(remain_last).__name__}: {remain_last.to_dataframe()=}")
-            print(f"DEBUG: [merge_records] -- {type(remain_first).__name__}: {remain_first.to_dataframe()=}")
-        else:
-            print("DEBUG: [merge_records] No targets to display remain_last/first.")
-
         if include_last_callback and targets and isinstance(targets[-1], NodePath):
             if not is_match_column(left_records.columns[-1], 'source_timestamp'):
                 right_records = targets[-1].to_path_end_records()
@@ -261,7 +249,7 @@ class RecordsMerged:
                 right_records.rename_columns(rename_rule)
                 
                 if left_records.columns[-1] != right_records.columns[0]:
-                    raise InvalidRecordsError('left columns[-1] != right columns[0]')
+                    raise InvalidRecordsError(f'{left_records.columns[-1]=} != {right_records.columns[0]=}')
                 else:
                     if len(right_records.data) != 0:
                         left_records = merge(
@@ -312,8 +300,6 @@ class RecordsMerged:
         if column_to_exclude_from_drop and column_to_exclude_from_drop in rmw_take_column:
             rmw_take_column.remove(column_to_exclude_from_drop)
             logger.info(f"Removed '{column_to_exclude_from_drop}' from rmw_take_column list before final drop.")
-        else:
-            logger.info("No specific RMW take column to preserve for the last Communication record, or it's not in the list to be dropped.")
 
         left_records.drop_columns(rmw_take_column)
 
@@ -346,7 +332,7 @@ class RecordsMerged:
         
         initial_row_count = len(first_element.data) if 'first_element' in locals() else 0
         if len(left_records.data) < initial_row_count:
-                logger.info(f"Removed {initial_row_count - len(left_records.data)} rows due to 0 or NA values in applicable columns.")
+            logger.info(f"Removed {initial_row_count - len(left_records.data)} rows due to 0 or NA values in applicable columns.")
 
         columns_to_drop_by_content = []
         try:
@@ -355,22 +341,18 @@ class RecordsMerged:
             for col in df_temp.columns:
                 if df_temp[col].isna().all():
                     columns_to_drop_by_content.append(col)
-                elif pd.api.types.is_numeric_dtype(df_temp[col]) and (df_temp[col] == 0).all():
+                elif (df_temp[col] == 0).all():
                     columns_to_drop_by_content.append(col)
                 
             if columns_to_drop_by_content:
                 unique_cols_to_drop = list(set(columns_to_drop_by_content))
                 logger.info(f"Dropping columns: {unique_cols_to_drop}")
                 left_records.drop_columns(unique_cols_to_drop)
-            else:
-                logger.info("No columns identified for dropping based on all 0 or all NA content.")
 
         except Exception as e:
-            logger.error(f"Error during column-level filtering: {e}")
+            logger.error(f"Error during column filtering: {e}")
 
         if take_records_applied_for_last_communication:
-            logger.info("Attempting to rename callback_start_timestamp to rmw_take_timestamp for the last communication's take records.")
-            
             column_to_rename = None
             new_column_name = None
             for col_name in reversed(left_records.columns):
@@ -383,9 +365,8 @@ class RecordsMerged:
                     break
             
             if column_to_rename:
+                logger.info(f"Rename column '{column_to_rename}' to '{new_column_name}'")
                 left_records.rename_columns({column_to_rename: new_column_name})
-            else:
-                logger.warning(f"Could not find a 'callback_start_timestamp' column to rename, even with take_records_applied_for_last_communication flag true.")
 
         return left_records
 
