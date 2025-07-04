@@ -1,7 +1,5 @@
-name: pytest
-
-on:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   pytest:
