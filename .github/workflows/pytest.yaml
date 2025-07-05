@@ -96,7 +96,7 @@ jobs:
           source /opt/ros/humble/setup.bash
           source caret_analyze_cpp_impl/install/setup.bash
           cd src
-          python3 -m pytest
+          python3 -m pytest -s -v --showlocals
         shell: bash
 
       - name: If pytest failure
