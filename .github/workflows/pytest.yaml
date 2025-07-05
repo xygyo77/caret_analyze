@@ -2,6 +2,7 @@ name: pytest
 
 on:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   pytest:
@@ -20,16 +21,32 @@ jobs:
           sudo apt-get install -y python3-babeltrace python3-lttng python3-bt2
         shell: bash
 
-      - name: ROSDEP install
+      - name: Setup ROS2 GPG key
         run: |
-          sudo apt-get install -y python3-rosdep
-          # sudo rosdep init
+          sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+        shell: bash
+
+      - name: Setup ROS2 repository
+        run: |
+          echo "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/ros2-latest.list
+          sudo apt-get update
+        shell: bash
+
+      - name: Install python3-rosdep
+        run: |
+          sudo apt-get install -y python3-rosdep python3-rosdep-modules
+          sudo rosdep init || echo "rosdep init failed, assuming already initialized"
           rosdep update
-          rosdep install -i --skip-keys "caret_analyze_cpp_impl" --from-paths . -y --rosdistro humble
+        shell: bash
+
+      - name: Run rosdep install
+        run: |
+          rosdep install -y --from-paths src --ignore-src --rosdistro humble
+        shell: bash
+
       - name: Install dependent packages
         run: |
           python3 -m pip install -r src/requirements.txt
-          # cSpell:ignore typeguard
           if dpkg -l | grep -q python3-typeguard; then
             sudo apt remove -y python3-typeguard
           fi
@@ -38,6 +55,7 @@ jobs:
         run: |
           dpkg -l > package_list.txt
           python3 -m pip list > pip_list.txt
+
       - name: Upload package list
         uses: actions/upload-artifact@v4
         with:
@@ -45,9 +63,11 @@ jobs:
           path: |
             package_list.txt
             pip_list.txt
+
       - name: Clone caret_analyze_cpp_impl
         run: |
           git clone https://github.com/tier4/caret_analyze_cpp_impl.git
+
       - name: Restore Cache
         id: cpp_impl-cache
         uses: actions/cache/restore@v4
