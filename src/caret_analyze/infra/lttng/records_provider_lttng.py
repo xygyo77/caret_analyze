@@ -923,7 +923,10 @@ class RecordsProviderLttng(RuntimeDataProvider):
             columns.append(COLUMN_NAME.DDS_WRITE_TIMESTAMP)
         columns += [
             COLUMN_NAME.SOURCE_TIMESTAMP,
-            COLUMN_NAME.RMW_TAKE_TIMESTAMP,
+        ]
+        if COLUMN_NAME.RMW_TAKE_TIMESTAMP in records.columns:
+            columns.append(COLUMN_NAME.RMW_TAKE_TIMESTAMP)
+        columns += [
             COLUMN_NAME.CALLBACK_START_TIMESTAMP,
         ]
 
@@ -1742,8 +1745,9 @@ class FilteredRecordsSource:
             COLUMN_NAME.CALLBACK_START_TIMESTAMP,
             COLUMN_NAME.PUBLISHER_HANDLE,
             COLUMN_NAME.RCLCPP_PUBLISH_TIMESTAMP,
-            COLUMN_NAME.RMW_TAKE_TIMESTAMP,
         ]
+        if COLUMN_NAME.RMW_TAKE_TIMESTAMP in merged.columns:
+            columns.append(COLUMN_NAME.RMW_TAKE_TIMESTAMP)
         if COLUMN_NAME.RCL_PUBLISH_TIMESTAMP in merged.columns:
             columns.append(COLUMN_NAME.RCL_PUBLISH_TIMESTAMP)
         if COLUMN_NAME.DDS_WRITE_TIMESTAMP in merged.columns:
