@@ -224,12 +224,6 @@ class EventCounter:
             'ros2_caret:sim_time': data.sim_time.to_dataframe(),
             'ros2_caret:on_data_available': data.on_data_available_instances.to_dataframe(),
             'ros2_caret:caret_init': data.caret_init.df,
-            # add agnocast
-            'ros2:agnocast_publish': data.rcl_publish_instances.to_dataframe(),
-            'ros2:agnocast_create_callable': data.agnocast_create_callable_instances.to_dataframe(),
-            'ros2:agnocast_callable_start': data.agnocast_callable_start_instances.to_dataframe(),
-            'ros2:agnocast_callable_end': data.agnocast_callable_end_instances.to_dataframe(),
-            'ros2:agnocast_take': data.rmw_take_instances.to_dataframe(),
         }
         #  'ros2_caret:rmw_implementation': ,
 
