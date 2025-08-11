@@ -90,3 +90,10 @@ jobs:
           echo "Did you send PR to both caret_analyze and caret_analyze_cpp_impl?"
           echo "In that case, this pytest action may fail because it tests new caret_analyze in combination with old caret_analyze_cpp_impl."
           exit 1
+
+      - name: Check mypy and ament_mypy versions
+        run: |
+          echo "ament_mypy version:"
+          pip show ament_lint_mypy
+          echo "mypy version:"
+          mypy --version
