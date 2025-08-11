@@ -93,7 +93,5 @@ jobs:
 
       - name: Check mypy and ament_mypy versions
         run: |
-          echo "ament_mypy version:"
-          pip show ament_lint_mypy
           echo "mypy version:"
           mypy --version
