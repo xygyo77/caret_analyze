@@ -53,6 +53,7 @@ class ColumnName(NamedTuple):
 
     SUBSCRIPTION_HANDLE: str = 'subscription_handle'
     NODE_HANDLE: str = 'node_handle'
+    TIMER_HANDLE: str = 'timer_handle'
     TOPIC_NAME: str = 'topic_name'
     DEPTH: str = 'depth'
     NODE_NAME: str = 'node_name'
@@ -69,6 +70,17 @@ class ColumnName(NamedTuple):
     TILDE_PUBLISH_TIMESTAMP: str = 'tilde_publish_timestamp'
     TILDE_SUBSCRIBE_TIMESTAMP: str = 'tilde_subscribe_timestamp'
     TILDE_MESSAGE_ID: str = 'tilde_message_id'
+
+    AGNOCAST_PUBLISH_TIMESTAMP: str = 'agnocast_publish_timestamp'
+    AGNOCAST_ENTRY_ID: str = 'agnocast_entry_id'
+    AGNOCAST_CREATE_CALLABLE_TIMESTAMP: str = 'agnocast_create_callable_timestamp'
+    AGNOCAST_CREATE_TIMER_CALLABLE_TIMESTAMP: str = 'agnocast_create_timer_callable_timestamp'
+    AGNOCAST_CALLABLE_START_TIMESTAMP: str = 'agnocast_callable_start_timestamp'
+    AGNOCAST_CALLABLE_END_TIMESTAMP: str = 'agnocast_callable_end_timestamp'
+    AGNOCAST_PID_CALLBACK_INFO_ID: str = 'agnocast_pid_callback_info_id'
+    AGNOCAST_CALLABLE_OBJECT: str = 'agnocast_callable_object'
+    AGNOCAST_TAKE_TIMESTAMP: str = 'agnocast_take_timestamp'
+    AGNOCAST_TAKE_EMPTY: str = 'agnocast_take_empty'
 
 
 COLUMN_NAME = ColumnName()

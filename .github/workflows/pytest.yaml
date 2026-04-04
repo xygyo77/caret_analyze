@@ -14,7 +14,7 @@ jobs:
     container: ghcr.io/autowarefoundation/autoware:universe-devel
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install LTTng
         run: |
@@ -44,7 +44,7 @@ jobs:
           dpkg -l > package_list.txt
           python3 -m pip list > pip_list.txt
       - name: Upload package list
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: package_list
           path: |
