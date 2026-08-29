@@ -1447,6 +1447,15 @@ class DataFrameFormatted:
         valid_cbg_addrs.update(data.callback_group_subscription.df.index)
         valid_cbg_addrs.update(data.callback_group_service.df.index)
         valid_cbg_addrs.update(data.callback_group_client.df.index)
+        # Include agnocast callback groups as well.
+        # Agnocast subscriptions/timers use callback_group_addr as a column,
+        # not as the index, unlike ROS 2 standard callback_group_* data.
+        if len(data.agnocast_subscriptions.df) > 0:
+            valid_cbg_addrs.update(
+                data.agnocast_subscriptions.df['callback_group_addr'].values)
+        if len(data.agnocast_timers.df) > 0:
+            valid_cbg_addrs.update(
+                data.agnocast_timers.df['callback_group_addr'].values)
         if len(valid_cbg_addrs) > 0:
             cbg_df = callback_groups.df
             callback_groups._df = cbg_df[
