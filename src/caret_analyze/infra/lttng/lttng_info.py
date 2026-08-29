@@ -1438,6 +1438,21 @@ class DataFrameFormatted:
         # Remove duplicates to make it unique.
         callback_groups.drop_duplicate()
 
+        # Remove callback groups that have no actual callbacks.
+        # This can happen with Jazzy's single_threaded_executor which records
+        # an internal callback_group via callback_group_to_executor_entity_collector
+        # but never adds any callbacks to it via callback_group_add_* events.
+        valid_cbg_addrs: set[int] = set()
+        valid_cbg_addrs.update(data.callback_group_timer.df.index)
+        valid_cbg_addrs.update(data.callback_group_subscription.df.index)
+        valid_cbg_addrs.update(data.callback_group_service.df.index)
+        valid_cbg_addrs.update(data.callback_group_client.df.index)
+        if len(valid_cbg_addrs) > 0:
+            cbg_df = callback_groups.df
+            callback_groups._df = cbg_df[
+                cbg_df['callback_group_addr'].isin(valid_cbg_addrs)
+            ]
+
         executor_duplicated_indexes = []
         for _, group in callback_groups.df.groupby('callback_group_addr'):
             if len(group) >= 2:
